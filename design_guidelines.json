@@ -1,0 +1,154 @@
+{
+  "app_info": {
+    "name": "LotePro",
+    "platform": "React Native (Expo)",
+    "language": "pt-BR",
+    "theme": "Light",
+    "archetype": "1 (Organic & Earthy) - Modified for Premium Fintech",
+    "core_vibe": "Seriedade, Confiabilidade, Trust, Money/Growth",
+    "forbidden_elements": ["Purple/Violet gradients", "Inter font for headings", "AI slop patterns"]
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#10B981",
+      "dark": "#047857",
+      "light": "#D1FAE5",
+      "description": "Emerald Green - Used for Primary CTAs, PIX, and positive yields. Represents money and growth."
+    },
+    "background": {
+      "DEFAULT": "#FFFFFF",
+      "surface": "#F9FAFB",
+      "surface_alt": "#F3F4F6",
+      "description": "Clean, airy whites and very soft grays to maximize readability and trust."
+    },
+    "text": {
+      "primary": "#111827",
+      "secondary": "#4B5563",
+      "muted": "#9CA3AF"
+    },
+    "border": {
+      "DEFAULT": "#E5E7EB",
+      "focus": "#10B981"
+    },
+    "status": {
+      "success": "#10B981",
+      "pending": "#F59E0B",
+      "danger": "#EF4444"
+    }
+  },
+  "typography": {
+    "heading_font": "Manrope (or default native System bold if custom fonts aren't setup, but simulate a geometric sans style)",
+    "body_font": "DM Sans (or System)",
+    "hierarchy": {
+      "h1": "text-4xl font-bold tracking-tight text-[#111827]",
+      "h2": "text-2xl font-bold tracking-tight text-[#111827]",
+      "h3": "text-lg font-semibold text-[#111827]",
+      "body": "text-base text-[#4B5563] leading-relaxed",
+      "caption": "text-sm text-[#9CA3AF]",
+      "currency_large": "text-5xl font-extrabold tracking-tighter text-[#111827]"
+    }
+  },
+  "spacing_and_layout": {
+    "screen_padding": "px-6 py-4",
+    "card_padding": "p-5",
+    "border_radius": {
+      "button": "rounded-xl",
+      "card": "rounded-2xl",
+      "input": "rounded-lg"
+    },
+    "shadows": {
+      "card": "shadow-[0_4px_20px_rgba(0,0,0,0.05)]",
+      "header": "shadow-sm"
+    }
+  },
+  "components": {
+    "Button": {
+      "primary": "bg-[#10B981] active:bg-[#047857] rounded-xl py-4 flex flex-row justify-center items-center shadow-md",
+      "primary_text": "text-white font-bold text-lg",
+      "secondary": "bg-[#F3F4F6] active:bg-[#E5E7EB] rounded-xl py-4 flex flex-row justify-center items-center",
+      "secondary_text": "text-[#111827] font-semibold text-lg"
+    },
+    "Card": {
+      "base": "bg-white rounded-2xl border border-[#E5E7EB] shadow-[0_4px_20px_rgba(0,0,0,0.05)] p-5 mb-4"
+    },
+    "Input": {
+      "base": "bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-4 py-3 text-[#111827] text-base focus:border-[#10B981]"
+    },
+    "BottomTab": {
+      "style": "bg-white border-t border-[#E5E7EB] pb-safe pt-2",
+      "active_color": "#10B981",
+      "inactive_color": "#9CA3AF"
+    }
+  },
+  "screens": {
+    "Auth": {
+      "description": "Login/Register screens. Clean white background, prominent logo, highly trusted inputs. No social logins required for MVP. Only Email/Password."
+    },
+    "HomeDashboard": {
+      "description": "Main screen. Generous spacing at the top. Shows 'Saldo na carteira' and 'Rendimentos acumulados'. Below: 'Meus Lotes Ativos' showing a list/carousel. Each active lote must have a progress bar indicating days passed vs 30 days total, and the current generated yield.",
+      "mechanics": "The yield is hourly. Visually emphasize that money is growing."
+    },
+    "Loja": {
+      "description": "Catalog of available lotes. Display cards with a high-quality photo, Name, Price, Rendimento/hora, and a 'Comprar' button. Cards should feel like premium product listings."
+    },
+    "LoteDetail": {
+      "description": "Detail modal/screen. Big image at the top. Clear breakdown of financials (e.g. Custa R$ 30, Rende R$ 0,09/h, Rende R$ 64,80 em 30 dias). Bold CTA to buy. Debits directly from the user's available balance."
+    },
+    "Carteira": {
+      "description": "Wallet view. Big display of 'Saldo Disponível' and 'Lucros Acumulados'. Buttons: 'Depositar via PIX', 'Sacar'. Below: Historico de transações (deposits, purchases, hourly credits, withdrawals)."
+    },
+    "Deposit": {
+      "description": "User enters amount. Screen displays a fake PIX QR code and a 'Chave PIX' (copyable). CTA 'Já paguei'. Clicking it creates a pending deposit request for the admin."
+    },
+    "Withdraw": {
+      "description": "User enters amount and their PIX key to receive funds. Checks against balance. Creates a pending withdrawal request."
+    },
+    "Profile": {
+      "description": "Simple profile options, 'Licença e Empresa' link, and Logout button. A hidden tap gesture (e.g. tap 5 times on version number) or a specific admin login routes to the Admin Panel."
+    },
+    "AboutLicense": {
+      "description": "Corporate trust page. Shows a photo of a modern building, text about 'LotePro Investimentos', mission, and a fictional CNPJ (e.g., 45.123.456/0001-90). Emphasize security and seriousness."
+    },
+    "AdminPanel": {
+      "description": "Hidden route. Tabs/Sections for: 1. Aprovar Depósitos (list of pending + approve/reject). 2. Aprovar Saques. 3. Gerenciar Lotes (CRUD for name, price, hourly yield, duration, photo URL). 4. Listar Usuários (view balances). 5. Configurar Chave PIX da empresa."
+    }
+  },
+  "media": {
+    "lote_tech_pc": {
+      "url": "https://images.unsplash.com/photo-1763191213523-1489179a1088?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBjb21wdXRlciUyMHdvcmtzdGF0aW9uJTIwZGVza3xlbnwwfHx8fDE3NzY4MTUxMTB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Premium tech computer workstation. Use for the 'Lote de PC' product."
+    },
+    "lote_safe_box": {
+      "url": "https://images.pexels.com/photos/32334240/pexels-photo-32334240.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Silver safe box. Use for a high-yield 'Cofre' lote."
+    },
+    "lote_gold": {
+      "url": "https://images.pexels.com/photos/19673920/pexels-photo-19673920.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Stack of gold coins. Use for a premium 'Ouro' lote."
+    },
+    "corporate_building": {
+      "url": "https://images.unsplash.com/photo-1766866771433-c3042a3ce7a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBjb3Jwb3JhdGUlMjBidWlsZGluZyUyMGZhY2FkZXxlbnwwfHx8fDE3NzY4MTUxMDB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Modern corporate building. Use for the Sobre/Licença page."
+    },
+    "pix_qr_placeholder": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/d0/QR_code_for_mobile_English_Wikipedia.svg",
+      "description": "Generic QR code placeholder for the deposit PIX screen."
+    }
+  },
+  "testing": {
+    "rules": [
+      "All interactive elements (TouchableOpacity, Pressable, Button, TextInput) MUST have a `data-testid` attribute.",
+      "Format: kebab-case, role-based. e.g., `data-testid=\"login-submit-button\"`, `data-testid=\"buy-lote-button\"`, `data-testid=\"deposit-value-input\"`."
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use plain `.js` files for React Native Expo components, NOT `.tsx` as per the user's explicit instructions.",
+    "Use Nativewind for styling if available, otherwise translate the provided Tailwind classes strictly into standard React Native StyleSheet objects.",
+    "For the bottom navigation, use @react-navigation/bottom-tabs. For icons, strictly use @expo/vector-icons (Feather or Ionicons are recommended).",
+    "Never use placeholders like 'via.placeholder.com' - strictly use the URLs provided in the `media` section.",
+    "Ensure 'trust' elements are heavily visible: borders should be crisp, text contrasts very high, and the Emerald Green (#10B981) should be used carefully for calls-to-action to give it an official banking feel.",
+    "The application logic will require a state manager (e.g., Context API or Zustand) to handle user balance, pending transactions, and the real-time hourly yield calculation.",
+    "Store the timestamp of when a Lote was bought, and dynamically calculate the yield based on `(current_time - bought_time) * hourly_yield` up to 30 days. You can use a `setInterval` in the UI to give a 'live increment' visual effect to the user's earnings, enhancing the 'dopamine/trust' hit.",
+    "Admin routes must be completely isolated from the standard BottomTab navigator."
+  ]
+}
