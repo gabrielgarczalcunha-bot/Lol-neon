@@ -30,7 +30,7 @@ export default function Deposito() {
       setPix(data);
       setStep("pix");
     } catch (e: any) {
-      Alert.alert("Erro", formatApiError(e));
+      Alert.alert("Não foi possível carregar o PIX", formatApiError(e));
     } finally {
       setLoading(false);
     }

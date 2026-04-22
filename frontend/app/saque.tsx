@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform, KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { api, fmtBRL, formatApiError } from "../src/api";
+import { useFocusEffect, useRouter } from "expo-router";
+import { api, fmtBRL, formatApiError, loadToken } from "../src/api";
 import { C } from "../src/theme";
 
 const KEY_TYPES = [
@@ -26,15 +26,23 @@ export default function Saque() {
   const [keyType, setKeyType] = useState<"cpf" | "email" | "telefone" | "aleatoria">("aleatoria");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
     (async () => {
+      // Wait until a token is actually persisted before firing requests (avoids 401 race on deep link)
+      const token = await loadToken();
+      if (!token || cancelled) return;
       try {
         const [w, r] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules")]);
+        if (cancelled) return;
         setBalance(w.data.balance || 0);
         setRules(r.data);
-      } catch {}
+      } catch (e: any) {
+        if (!cancelled) Alert.alert("Erro", formatApiError(e));
+      }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, []));
 
   const gross = parseFloat(amount.replace(",", ".")) || 0;
   const taxPct = rules?.tax_pct || 0;

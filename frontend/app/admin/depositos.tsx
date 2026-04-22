@@ -60,34 +60,64 @@ export default function AdminDeposits() {
             <View style={s.empty}><Text style={{ color: C.textMuted }}>Nenhum depósito {filter === "pending" ? "pendente" : filter === "approved" ? "aprovado" : "rejeitado"}.</Text></View>
           ) : items.map((d) => (
             <View key={d.id} style={s.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.name}>{d.user_name}</Text>
-                <Text style={s.email}>{d.user_email}</Text>
-                <Text style={s.date}>{new Date(d.created_at).toLocaleString("pt-BR")}</Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
+              <View style={s.cardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.name}>{d.user_name}</Text>
+                  <Text style={s.email}>{d.user_email}</Text>
+                  <Text style={s.date}>{new Date(d.created_at).toLocaleString("pt-BR")}</Text>
+                </View>
                 <Text style={s.amount}>{fmtBRL(d.amount)}</Text>
-                {filter === "pending" ? (
-                  <View style={s.actions}>
-                    <TouchableOpacity style={[s.actBtn, { backgroundColor: C.primary }]} onPress={() => act(d.id, "approve")} testID={`approve-${d.id}`}>
-                      <Ionicons name="checkmark" size={14} color="#fff" />
-                      <Text style={s.actText}>Aprovar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[s.actBtn, { backgroundColor: C.danger }]} onPress={() => act(d.id, "reject")} testID={`reject-${d.id}`}>
-                      <Ionicons name="close" size={14} color="#fff" />
-                      <Text style={s.actText}>Rejeitar</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={[s.status, { color: d.status === "approved" ? C.primary : C.danger }]}>
-                    {d.status === "approved" ? "Aprovado" : "Rejeitado"}
-                  </Text>
-                )}
               </View>
+
+              {d.proof_image ? (
+                <TouchableOpacity
+                  onPress={() => setPreview(d.proof_image!)}
+                  style={s.proofBtn}
+                  testID={`view-proof-${d.id}`}
+                  activeOpacity={0.85}
+                >
+                  <Image source={{ uri: d.proof_image }} style={s.proofImg} resizeMode="cover" />
+                  <View style={s.proofOverlay}>
+                    <Ionicons name="expand-outline" size={18} color="#fff" />
+                    <Text style={s.proofText}>Ver comprovante</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={s.noProof}>
+                  <Ionicons name="alert-circle-outline" size={14} color="#92400E" />
+                  <Text style={s.noProofText}>Sem comprovante anexado</Text>
+                </View>
+              )}
+
+              {filter === "pending" ? (
+                <View style={s.actions}>
+                  <TouchableOpacity style={[s.actBtn, { backgroundColor: C.primary }]} onPress={() => act(d.id, "approve")} testID={`approve-${d.id}`}>
+                    <Ionicons name="checkmark" size={14} color="#fff" />
+                    <Text style={s.actText}>Aprovar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.actBtn, { backgroundColor: C.danger }]} onPress={() => act(d.id, "reject")} testID={`reject-${d.id}`}>
+                    <Ionicons name="close" size={14} color="#fff" />
+                    <Text style={s.actText}>Rejeitar</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={[s.status, { color: d.status === "approved" ? C.primary : C.danger }]}>
+                  {d.status === "approved" ? "Aprovado" : "Rejeitado"}
+                </Text>
+              )}
             </View>
           ))}
         </ScrollView>
       )}
+
+      <Modal visible={!!preview} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
+        <View style={s.modal}>
+          <TouchableOpacity style={s.modalClose} onPress={() => setPreview(null)} testID="proof-close">
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {preview ? <Image source={{ uri: preview }} style={s.modalImg} resizeMode="contain" /> : null}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -104,6 +134,7 @@ const s = StyleSheet.create({
   tabText: { color: C.textSecondary, fontWeight: "700", fontSize: 12 },
   tabTextActive: { color: "#fff" },
   card: { backgroundColor: "#fff", padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
+  cardTop: { flexDirection: "row", alignItems: "center" },
   name: { fontWeight: "800", color: C.textPrimary },
   email: { color: C.textMuted, fontSize: 12, marginTop: 2 },
   date: { color: C.textMuted, fontSize: 11, marginTop: 2 },
@@ -114,7 +145,7 @@ const s = StyleSheet.create({
   status: { fontSize: 12, fontWeight: "700", marginTop: 10, textAlign: "right" },
   empty: { padding: 30, alignItems: "center" },
   proofBtn: { marginTop: 10, borderRadius: 12, overflow: "hidden", position: "relative" },
-  proofImg: { width: "100%", height: 160, backgroundColor: C.surfaceAlt },
+  proofImg: { width: "100%", height: 180, backgroundColor: C.surfaceAlt },
   proofOverlay: { position: "absolute", bottom: 8, right: 8, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.65)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   proofText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   noProof: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, padding: 10, backgroundColor: "#FFFBEB", borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A" },

@@ -1,0 +1,38 @@
+{
+  "summary": "Iteração 3 LotePro (frontend only). Retestes dos 3 bugs críticos da iteração 2 — TODOS PASSARAM. Regressão do fluxo completo depósito→saque também valida. Correções aplicadas pelo main agent funcionam no ambiente web preview (Expo).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console (global)", "issue": "Warnings persistem (não bloqueantes): 'shadow*' style props deprecated -> usar boxShadow; 'props.pointerEvents is deprecated' -> usar style.pointerEvents. Ocorrem nas views com sombra e em alguns componentes do Expo/RN Web."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/backend/tests/test_iteration2.py",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "action_items": [
+    "(OPCIONAL/LOW) Remover/substituir props shadow* por boxShadow nas StyleSheet para limpar console.",
+    "(OPCIONAL/LOW) Propagar pointerEvents como style em vez de prop direta onde aplicável."
+  ],
+  "critical_code_review_comments": [
+    "depositos.tsx agora renderiza Image do proof_image e Modal fullscreen com testIDs view-proof-<id>/proof-close — OK. Resto do código mantido.",
+    "saque.tsx: useFocusEffect + await loadToken() antes do fetch resolve o race condition 401 e o card de regras aparece no primeiro render após o rules ser carregado.",
+    "deposito.tsx: next() avança para step pix corretamente após GET /api/settings/pix. Tela QR Code renderiza e deposit-already-paid fica visível.",
+    "Ainda assim, sugiro adicionar loading/error states visuais mais claros para o fetch do /settings/pix (hoje só há Alert em erro)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not re-tested (per request) — mantém 100% (31/31) da iteração 2",
+    "frontend": "100% nos 3 bugs + 1 regressão (4/4)"
+  },
+  "seed_data_creation": "Criado 1 usuário test_it3_<rand>@ex.com via /api/auth/register + 1 depósito de R$30 com proof_image (aprovado durante o teste) + 1 saque R$10 (aprovado).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend base = process.env.EXPO_PUBLIC_BACKEND_URL (https://lotes-gestao.preview.emergentagent.com/api). Token storage web key = 'lotepro.token' (localStorage). Admin ggc@gmail.com/@N1collas. Fluxo completo depósito→admin approve→saque R$10 primeiro sem taxa→admin approve→rules mudam para tax_pct=10 min=30 validado end-to-end.",
+  "rca_of_issue": "Iteração 3: todos os 3 bugs da iteração 2 foram efetivamente corrigidos pelo main agent: (BUG#1) depositos.tsx agora inclui TouchableOpacity com Image do proof_image + Modal fullscreen com testID proof-close; (BUG#2) saque.tsx usa useFocusEffect + await loadToken() antes do Promise.all([/wallet,/withdrawals/rules]), eliminando o 401 race e fazendo o card de regras renderizar sempre; (BUG#3) deposit-next avança corretamente para step 'pix' e o botão deposit-already-paid fica visível. Teste E2E (Playwright mobile 390x844): registrar user → criar depósito c/ proof via API → login admin UI → clicar view-proof abriu modal com proof-close → fechar modal → aprovar depósito → logar user UI em /deposito digitando 30 + click deposit-next → deposit-already-paid apareceu → logar user em /saque → card 'Este é seu primeiro saque — mínimo R$ 10,00 sem taxa' apareceu → submit saque R$10 → admin approve → GET /withdrawals/rules retornou {is_first_withdrawal:false, min_amount:30, tax_pct:10, message:'Saque mínimo R$ 30,00 com taxa de 10%.'} — regressão OK."
+}
