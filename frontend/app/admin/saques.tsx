@@ -56,7 +56,7 @@ export default function AdminWithdrawals() {
       {loading ? <View style={s.center}><ActivityIndicator color={C.primary} /></View> : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           {items.length === 0 ? (
-            <View style={s.empty}><Text style={{ color: C.textMuted }}>Nenhum saque {filter}.</Text></View>
+            <View style={s.empty}><Text style={{ color: C.textMuted }}>Nenhum saque {filter === "pending" ? "pendente" : filter === "approved" ? "aprovado" : "rejeitado"}.</Text></View>
           ) : items.map((d) => (
             <View key={d.id} style={s.card}>
               <View style={s.cardTop}>
