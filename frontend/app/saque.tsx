@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform, KeyboardAvoidingView,
 } from "react-native";
@@ -15,9 +15,12 @@ const KEY_TYPES = [
   { k: "aleatoria", label: "Aleatória" },
 ];
 
+type Rules = { is_first_withdrawal: boolean; min_amount: number; tax_pct: number; message: string };
+
 export default function Saque() {
   const router = useRouter();
   const [balance, setBalance] = useState(0);
+  const [rules, setRules] = useState<Rules | null>(null);
   const [amount, setAmount] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [keyType, setKeyType] = useState<"cpf" | "email" | "telefone" | "aleatoria">("aleatoria");
@@ -26,29 +29,48 @@ export default function Saque() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/wallet");
-        setBalance(data.balance || 0);
+        const [w, r] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules")]);
+        setBalance(w.data.balance || 0);
+        setRules(r.data);
       } catch {}
     })();
   }, []);
 
+  const gross = parseFloat(amount.replace(",", ".")) || 0;
+  const taxPct = rules?.tax_pct || 0;
+  const taxAmount = useMemo(() => +(gross * taxPct / 100).toFixed(2), [gross, taxPct]);
+  const netAmount = useMemo(() => +(gross - taxAmount).toFixed(2), [gross, taxAmount]);
+
   const submit = async () => {
-    const v = parseFloat(amount.replace(",", "."));
-    if (!v || v <= 0) { Alert.alert("Atenção", "Informe um valor válido."); return; }
-    if (v > balance) { Alert.alert("Atenção", "Saldo insuficiente."); return; }
+    if (!rules) return;
+    if (!gross || gross <= 0) { Alert.alert("Atenção", "Informe um valor válido."); return; }
+    if (gross < rules.min_amount) {
+      Alert.alert("Atenção", `Valor mínimo: ${fmtBRL(rules.min_amount)}`);
+      return;
+    }
+    if (gross > balance) { Alert.alert("Atenção", "Saldo insuficiente."); return; }
     if (!pixKey.trim()) { Alert.alert("Atenção", "Informe a chave PIX de destino."); return; }
+
     setLoading(true);
     try {
-      await api.post("/withdrawals", { amount: v, pix_key: pixKey.trim(), pix_key_type: keyType });
-      Alert.alert("Saque solicitado", "Seu saque foi registrado e será processado em até 24h.", [
-        { text: "OK", onPress: () => router.replace("/(tabs)/carteira") },
-      ]);
+      await api.post("/withdrawals", { amount: gross, pix_key: pixKey.trim(), pix_key_type: keyType });
+      Alert.alert(
+        "Saque solicitado!",
+        rules.is_first_withdrawal
+          ? `Você receberá ${fmtBRL(gross)} na sua chave PIX assim que o saque for aprovado.`
+          : `Valor solicitado: ${fmtBRL(gross)}\nTaxa de ${taxPct}%: ${fmtBRL(taxAmount)}\nVocê receberá: ${fmtBRL(netAmount)}`,
+        [{ text: "OK", onPress: () => router.replace("/(tabs)/carteira") }]
+      );
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
     } finally {
       setLoading(false);
     }
   };
+
+  if (!rules) {
+    return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator color={C.primary} /></View></SafeAreaView>;
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
@@ -67,6 +89,15 @@ export default function Saque() {
             <Text style={s.balanceValue}>{fmtBRL(balance)}</Text>
           </View>
 
+          <View style={[s.rules, rules.is_first_withdrawal ? { borderColor: C.primary } : { borderColor: C.pending }]}>
+            <Ionicons
+              name={rules.is_first_withdrawal ? "gift" : "receipt"}
+              size={18}
+              color={rules.is_first_withdrawal ? C.primary : C.pending}
+            />
+            <Text style={s.rulesText}>{rules.message}</Text>
+          </View>
+
           <View style={s.card}>
             <Text style={s.label}>Valor do saque</Text>
             <View style={s.amountRow}>
@@ -81,9 +112,21 @@ export default function Saque() {
                 onChangeText={setAmount}
               />
             </View>
-            <TouchableOpacity onPress={() => setAmount(String(balance.toFixed(2)))} testID="withdraw-max">
-              <Text style={s.max}>Usar saldo total</Text>
-            </TouchableOpacity>
+            <View style={s.quickRow}>
+              <Text style={s.hint}>Mín. {fmtBRL(rules.min_amount)}</Text>
+              <TouchableOpacity onPress={() => setAmount(String(balance.toFixed(2)))} testID="withdraw-max">
+                <Text style={s.max}>Usar saldo total</Text>
+              </TouchableOpacity>
+            </View>
+
+            {gross > 0 && taxPct > 0 && (
+              <View style={s.breakdown}>
+                <Row k="Valor solicitado" v={fmtBRL(gross)} />
+                <Row k={`Taxa (${taxPct}%)`} v={`- ${fmtBRL(taxAmount)}`} negative />
+                <View style={s.sep} />
+                <Row k="Você recebe" v={fmtBRL(netAmount)} highlight />
+              </View>
+            )}
           </View>
 
           <View style={s.card}>
@@ -100,7 +143,6 @@ export default function Saque() {
                 </TouchableOpacity>
               ))}
             </View>
-
             <Text style={[s.label, { marginTop: 14 }]}>Chave PIX de destino</Text>
             <TextInput
               testID="withdraw-pix-key"
@@ -115,9 +157,7 @@ export default function Saque() {
 
           <View style={s.info}>
             <Ionicons name="time-outline" size={16} color={C.primaryDark} />
-            <Text style={s.infoText}>
-              O valor será reservado imediatamente e repassado via PIX em até 24h após aprovação.
-            </Text>
+            <Text style={s.infoText}>O valor é reservado no momento do pedido e enviado via PIX em até 24h após aprovação.</Text>
           </View>
 
           <TouchableOpacity style={[s.btn, loading && { opacity: 0.7 }]} onPress={submit} disabled={loading} testID="withdraw-submit">
@@ -129,22 +169,43 @@ export default function Saque() {
   );
 }
 
+function Row({ k, v, negative, highlight }: any) {
+  return (
+    <View style={s.brRow}>
+      <Text style={[s.brKey, highlight && { color: C.textPrimary, fontWeight: "700" }]}>{k}</Text>
+      <Text style={[s.brVal, negative && { color: C.danger }, highlight && { color: C.primary, fontSize: 17, fontWeight: "800" }]}>{v}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.surface },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#fff" },
   back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   h1: { color: C.textPrimary, fontSize: 17, fontWeight: "800" },
 
-  balanceCard: { backgroundColor: C.primary, borderRadius: 18, padding: 20, marginBottom: 16 },
+  balanceCard: { backgroundColor: C.primary, borderRadius: 18, padding: 20, marginBottom: 12 },
   balanceLabel: { color: "#D1FAE5", fontSize: 12 },
   balanceValue: { color: "#fff", fontSize: 26, fontWeight: "800", marginTop: 4 },
 
-  card: { backgroundColor: "#fff", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.border, marginBottom: 14 },
+  rules: { flexDirection: "row", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, marginBottom: 12 },
+  rulesText: { flex: 1, color: C.textPrimary, fontSize: 12, fontWeight: "600" },
+
+  card: { backgroundColor: "#fff", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
   label: { color: C.textSecondary, fontSize: 13, fontWeight: "600" },
   amountRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, marginTop: 10, borderBottomWidth: 2, borderBottomColor: C.primary, paddingBottom: 10 },
   currency: { color: C.textPrimary, fontSize: 20, fontWeight: "700", marginBottom: 6 },
   amountInput: { flex: 1, fontSize: 32, fontWeight: "800", color: C.textPrimary, padding: 0 },
-  max: { color: C.primary, fontWeight: "700", fontSize: 12, marginTop: 10 },
+  quickRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
+  hint: { color: C.textMuted, fontSize: 12 },
+  max: { color: C.primary, fontWeight: "700", fontSize: 12 },
+
+  breakdown: { marginTop: 14, padding: 12, borderRadius: 10, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  brRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
+  brKey: { color: C.textSecondary, fontSize: 13 },
+  brVal: { color: C.textPrimary, fontSize: 13, fontWeight: "600" },
+  sep: { height: 1, backgroundColor: C.border, marginVertical: 6 },
 
   chips: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },

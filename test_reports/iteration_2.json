@@ -1,0 +1,79 @@
+{
+  "summary": "Iteração 2 LotePro: backend 100% verde (31/31 pytest, inclui 11 novos casos específicos p/ proof_image e regras de saque). Frontend apresenta 3 bugs CRÍTICOS (1 feature completamente faltando + 2 integrações quebradas) que impedem o fluxo pedido pelo usuário.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/admin/depositos.tsx",
+        "issue": "FEATURE AUSENTE: o arquivo importa Modal/Image, define styles proofBtn/proofImg/proofOverlay e o state `preview`, MAS o JSX nunca renderiza nem a miniatura do comprovante nem o Modal de visualização em tela cheia. Não existe nenhum elemento com testID `view-proof-<id>` nem `proof-close`. Admin não consegue ver o comprovante enviado pelo usuário — bloqueia o requisito (1) do usuário. Verificado em runtime: `document.querySelectorAll('[data-testid*=proof]').length === 0` e `document.querySelectorAll('img').length === 0` na tela /admin/depositos com depósito pendente existente no banco.",
+        "testID": "view-proof-<id>, proof-close (AMBOS AUSENTES)",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "app/saque.tsx",
+        "issue": "Card de regras ('Este é seu primeiro saque — mínimo R$ 10,00 sem taxa.' / 'Saque mínimo R$ 30,00 com taxa de 10%.') NÃO aparece na tela. Conteúdo renderizado na /saque vai direto de 'Saldo disponível' para 'Valor do saque', pulando o card. Provavelmente a chamada GET /api/withdrawals/rules não está sendo executada ou está falhando silenciosamente (state `rules` permanece null, e o JSX `{rules && (...)}` nunca renderiza). Backend do endpoint foi testado e responde 200 normalmente com os campos esperados.",
+        "testID": "(esperado) withdraw-rules-card — não encontrado no DOM",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "app/deposito.tsx",
+        "issue": "Clicar em 'Continuar' (testID=deposit-next) no step 1 com valor preenchido NÃO avança para o step 2. O botão 'deposit-already-paid' não aparece após 2.5s em 2 tentativas independentes (reproduzível). Isto bloqueia todo o novo fluxo de 3 steps. Step 1 por si só renderiza corretamente (amount input e chips quick-30/50/100/200/500 visíveis).",
+        "testID": "deposit-next (click não avança), deposit-already-paid (não aparece)",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Admin → visualizar comprovante de depósito",
+        "issue": "Backend retorna proof_image corretamente em GET /api/admin/deposits (verificado em pytest), mas o frontend simplesmente não exibe.",
+        "affected_testIDs": ["view-proof-<id>", "proof-close"]
+      },
+      {
+        "flow": "Usuário → ver regras antes de solicitar saque",
+        "issue": "GET /api/withdrawals/rules funciona no backend mas o frontend não consome/exibe o resultado.",
+        "affected_testIDs": []
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "logs do browser",
+        "issue": "Warnings 'shadow*' / 'props.pointerEvents' continuam no console (não bloqueantes)."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/it2_results.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(CRITICAL) Em app/admin/depositos.tsx adicionar: (a) TouchableOpacity com testID `view-proof-${d.id}` dentro do card quando d.proof_image existir (usar styles proofBtn/proofImg/proofOverlay que já estão definidos); (b) <Modal visible={!!preview}> renderizando <Image source={{uri: preview}} style={fullScreen}/> e um botão close com testID `proof-close` que faz setPreview(null).",
+    "(CRITICAL) Em app/saque.tsx verificar por que `rules` state fica null. Checar o useEffect que chama GET /api/withdrawals/rules — provavelmente está dentro de useFocusEffect mas não está sendo disparado na web, ou um throw está sendo silenciado. Garantir que o card (<View style={s.rules}>) apareça SEMPRE que /saque for aberta.",
+    "(CRITICAL) Em app/deposito.tsx investigar por que setStep('pix') (ou equivalente) não está disparando após o click em deposit-next. Possíveis causas: async/await no `next()` está travando em GET /api/settings/pix com erro, ou setState não está sendo chamado. Validar que mesmo com API offline o step avança para mostrar mensagem de erro em vez de engolir o click.",
+    "(LOW) Padronizar chave de armazenamento da sessão: testes tentaram injetar token em localStorage keys `lotepro_token`/`lotepro_user` sem efeito — app usa outro mecanismo (provavelmente expo-secure-store com chave própria). Documentar para futuros agentes de teste."
+  ],
+  "critical_code_review_comments": [
+    "admin/depositos.tsx tem state `preview` + imports Modal/Image + styles `proofBtn/proofImg/proofOverlay` definidos mas o JSX não usa nenhum deles — dead code que indica feature deixada pela metade.",
+    "saque.tsx `{rules && (<View style={s.rules}>...)}` — falha silenciosa quando rules==null. Recomendado mostrar fallback (skeleton) e logar o erro da fetch para facilitar debug.",
+    "Backend: POST /api/deposits — não valida que proof_image começa com `data:image/` (aceita qualquer string >=10 chars). Sugerido validar prefixo no Pydantic validator para evitar lixo no banco.",
+    "Backend: min_length=10 em DepositReq.proof_image faz strings curtas retornarem 422, mas o max_length=8_000_000 permite base64 grandes; considerar limite em bytes (~ 5 MB) + MIME whitelist."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2.py (novo — 11 cases para iteração 2)",
+    "/app/backend/tests/backend_test.py (atualizado: passa proof_image em create_deposit; tolera mudança de nomes de lotes seed)"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 pytest, incluindo todos os 11 casos iteração 2)",
+    "frontend": "~40% — step 1 do depósito e renderização base da /saque OK; 3 bugs críticos bloqueiam o fluxo pedido"
+  },
+  "seed_data_creation": "Criou-se múltiplos usuários TEST_it2_*/TEST_wd_*/uit_* via /api/auth/register + 1 depósito pendente com proof_image para o admin visualizar (mas o admin UI não exibe).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL = EXPO_PUBLIC_BACKEND_URL. Admin ggc@gmail.com/@N1collas. testIDs de login: login-email-input, login-password-input, login-submit-button (NÃO login-email). Pytest de iteração 2 em /app/backend/tests/test_iteration2.py — rodá-lo isoladamente: `pytest /app/backend/tests/test_iteration2.py -v`. Proof base64 de 1×1 PNG disponível na constante PROOF_B64 do mesmo arquivo. A tela /saque e /admin/depositos precisam de recheck após main agent corrigir.",
+  "rca_of_issue": "(1) admin/depositos.tsx: JSX do preview + modal simplesmente não foi escrito, apenas o scaffolding (imports/state/styles). (2) saque.tsx: o state `rules` permanece null em runtime — GET /api/withdrawals/rules funciona no backend, então o bug é um fetch não chamado (provável falha em useFocusEffect/useEffect no web) ou um await bloqueando. (3) deposito.tsx step transition: click em deposit-next não avança (possível exceção silenciosa em fetchPix via api.get('/settings/pix') antes de setStep)."
+}

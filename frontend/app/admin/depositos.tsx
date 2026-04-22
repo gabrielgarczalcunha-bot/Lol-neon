@@ -1,18 +1,19 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, Modal } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api, fmtBRL, formatApiError } from "../../src/api";
 import { C } from "../../src/theme";
 
-type Dep = { id: string; user_name: string; user_email: string; amount: number; status: string; created_at: string };
+type Dep = { id: string; user_name: string; user_email: string; amount: number; status: string; created_at: string; proof_image?: string };
 
 export default function AdminDeposits() {
   const router = useRouter();
   const [filter, setFilter] = useState<"pending" | "approved" | "rejected">("pending");
   const [items, setItems] = useState<Dep[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,14 +103,23 @@ const s = StyleSheet.create({
   tabActive: { backgroundColor: C.primary },
   tabText: { color: C.textSecondary, fontWeight: "700", fontSize: 12 },
   tabTextActive: { color: "#fff" },
-  card: { flexDirection: "row", gap: 10, backgroundColor: "#fff", padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
+  card: { backgroundColor: "#fff", padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
   name: { fontWeight: "800", color: C.textPrimary },
   email: { color: C.textMuted, fontSize: 12, marginTop: 2 },
   date: { color: C.textMuted, fontSize: 11, marginTop: 2 },
   amount: { fontWeight: "800", fontSize: 18, color: C.primary },
-  actions: { flexDirection: "row", gap: 6, marginTop: 8 },
-  actBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  actions: { flexDirection: "row", gap: 8, marginTop: 10 },
+  actBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, borderRadius: 10 },
   actText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  status: { fontSize: 12, fontWeight: "700", marginTop: 6 },
+  status: { fontSize: 12, fontWeight: "700", marginTop: 10, textAlign: "right" },
   empty: { padding: 30, alignItems: "center" },
+  proofBtn: { marginTop: 10, borderRadius: 12, overflow: "hidden", position: "relative" },
+  proofImg: { width: "100%", height: 160, backgroundColor: C.surfaceAlt },
+  proofOverlay: { position: "absolute", bottom: 8, right: 8, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(0,0,0,0.65)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  proofText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  noProof: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6, padding: 10, backgroundColor: "#FFFBEB", borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A" },
+  noProofText: { color: "#92400E", fontSize: 11, fontWeight: "600" },
+  modal: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center" },
+  modalImg: { width: "100%", height: "85%" },
+  modalClose: { position: "absolute", top: 50, right: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
 });

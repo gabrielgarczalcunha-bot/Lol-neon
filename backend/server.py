@@ -122,6 +122,7 @@ class LoteUpdate(BaseModel):
 
 class DepositReq(BaseModel):
     amount: float = Field(gt=0)
+    proof_image: str = Field(min_length=10, max_length=8_000_000)  # base64 data URL
 
 
 class WithdrawReq(BaseModel):
@@ -483,6 +484,7 @@ async def create_deposit(body: DepositReq, user: dict = Depends(get_current_user
         "user_name": user["name"],
         "user_email": user["email"],
         "amount": float(body.amount),
+        "proof_image": body.proof_image,
         "status": "pending",
         "created_at": now_iso(),
         "reviewed_at": None,
@@ -500,20 +502,63 @@ async def my_deposits(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # WITHDRAWALS (USER)
 # ---------------------------------------------------------------------------
+@api.get("/withdrawals/rules")
+async def withdrawal_rules(user: dict = Depends(get_current_user)):
+    count_approved = await db.withdrawals.count_documents(
+        {"user_id": user["id"], "status": "approved"}
+    )
+    is_first = count_approved == 0
+    return {
+        "is_first_withdrawal": is_first,
+        "min_amount": 10.0 if is_first else 30.0,
+        "tax_pct": 0.0 if is_first else 10.0,
+        "message": (
+            "Este é seu primeiro saque — mínimo R$ 10,00 sem taxa."
+            if is_first
+            else "Saque mínimo R$ 30,00 com taxa de 10%."
+        ),
+    }
+
+
 @api.post("/withdrawals")
 async def create_withdrawal(body: WithdrawReq, user: dict = Depends(get_current_user)):
     current = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     balance = float(current.get("balance", 0))
-    if body.amount > balance:
+
+    count_approved = await db.withdrawals.count_documents(
+        {"user_id": user["id"], "status": "approved"}
+    )
+    is_first = count_approved == 0
+    min_amount = 10.0 if is_first else 30.0
+    tax_pct = 0.0 if is_first else 10.0
+
+    amount = float(body.amount)
+    if amount < min_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Valor mínimo para {'o primeiro saque' if is_first else 'saques'}: R$ {min_amount:.2f}"
+            ),
+        )
+    if amount > balance:
         raise HTTPException(status_code=400, detail="Saldo insuficiente")
-    # Reserve the balance immediately
-    await db.users.update_one({"id": user["id"]}, {"$inc": {"balance": -float(body.amount)}})
+
+    tax_amount = round(amount * tax_pct / 100.0, 2)
+    net_amount = round(amount - tax_amount, 2)
+
+    # Reserve the GROSS balance immediately
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"balance": -amount}})
+
     wd = {
         "id": new_id(),
         "user_id": user["id"],
         "user_name": user["name"],
         "user_email": user["email"],
-        "amount": float(body.amount),
+        "amount": amount,          # gross (debited from balance)
+        "tax_pct": tax_pct,
+        "tax_amount": tax_amount,
+        "net_amount": net_amount,  # what the user actually receives via PIX
+        "is_first_withdrawal": is_first,
         "pix_key": body.pix_key,
         "pix_key_type": body.pix_key_type,
         "status": "pending",
@@ -526,8 +571,12 @@ async def create_withdrawal(body: WithdrawReq, user: dict = Depends(get_current_
             "id": new_id(),
             "user_id": user["id"],
             "type": "withdraw_request",
-            "amount": -float(body.amount),
-            "description": "Solicitação de saque (reservado)",
+            "amount": -amount,
+            "description": (
+                f"Saque solicitado (R$ {net_amount:.2f} líq. + taxa {tax_pct:.0f}%)"
+                if tax_pct > 0
+                else "Saque solicitado (sem taxa)"
+            ),
             "created_at": now_iso(),
         }
     )

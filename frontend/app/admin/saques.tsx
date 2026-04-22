@@ -6,7 +6,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { api, fmtBRL, formatApiError } from "../../src/api";
 import { C } from "../../src/theme";
 
-type W = { id: string; user_name: string; user_email: string; amount: number; status: string; created_at: string; pix_key: string; pix_key_type: string };
+type W = { id: string; user_name: string; user_email: string; amount: number; status: string; created_at: string; pix_key: string; pix_key_type: string; tax_pct?: number; tax_amount?: number; net_amount?: number; is_first_withdrawal?: boolean };
 
 export default function AdminWithdrawals() {
   const router = useRouter();
@@ -61,12 +61,35 @@ export default function AdminWithdrawals() {
             <View key={d.id} style={s.card}>
               <View style={s.cardTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.name}>{d.user_name}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={s.name}>{d.user_name}</Text>
+                    {d.is_first_withdrawal && (
+                      <View style={s.firstBadge}><Text style={s.firstText}>1º saque</Text></View>
+                    )}
+                  </View>
                   <Text style={s.email}>{d.user_email}</Text>
                   <Text style={s.date}>{new Date(d.created_at).toLocaleString("pt-BR")}</Text>
                 </View>
                 <Text style={s.amount}>{fmtBRL(d.amount)}</Text>
               </View>
+
+              {typeof d.tax_pct === "number" && d.tax_pct > 0 && (
+                <View style={s.taxBox}>
+                  <View style={s.taxRow}>
+                    <Text style={s.taxKey}>Solicitado</Text>
+                    <Text style={s.taxVal}>{fmtBRL(d.amount)}</Text>
+                  </View>
+                  <View style={s.taxRow}>
+                    <Text style={s.taxKey}>Taxa ({d.tax_pct}%)</Text>
+                    <Text style={[s.taxVal, { color: C.danger }]}>- {fmtBRL(d.tax_amount || 0)}</Text>
+                  </View>
+                  <View style={s.taxRow}>
+                    <Text style={[s.taxKey, { fontWeight: "800", color: C.textPrimary }]}>Pagar ao usuário</Text>
+                    <Text style={[s.taxVal, { color: C.primary, fontSize: 15, fontWeight: "800" }]}>{fmtBRL(d.net_amount || d.amount)}</Text>
+                  </View>
+                </View>
+              )}
+
               <View style={s.pixBox}>
                 <Text style={s.pixLabel}>Chave PIX ({d.pix_key_type})</Text>
                 <Text style={s.pixValue} selectable>{d.pix_key}</Text>
@@ -115,6 +138,12 @@ const s = StyleSheet.create({
   pixBox: { marginTop: 10, backgroundColor: C.surface, borderRadius: 10, padding: 10 },
   pixLabel: { color: C.textMuted, fontSize: 11 },
   pixValue: { color: C.textPrimary, fontWeight: "700", marginTop: 2, fontSize: 13 },
+  firstBadge: { backgroundColor: C.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  firstText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+  taxBox: { marginTop: 10, padding: 10, backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.border },
+  taxRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2 },
+  taxKey: { color: C.textSecondary, fontSize: 12 },
+  taxVal: { color: C.textPrimary, fontSize: 12, fontWeight: "600" },
   actions: { flexDirection: "row", gap: 8, marginTop: 10 },
   actBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 10 },
   actText: { color: "#fff", fontWeight: "700" },
