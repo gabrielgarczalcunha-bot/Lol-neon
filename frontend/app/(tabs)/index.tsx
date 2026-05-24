@@ -219,7 +219,7 @@ const s = StyleSheet.create({
   heroRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 16 },
   heroSmall: { color: "#D1FAE5", fontSize: 12 },
   heroAccent: { color: "#fff", fontSize: 18, fontWeight: "700", marginTop: 2 },
-  heroBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#fff", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
+  heroBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.card, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
   heroBtnText: { color: C.primary, fontWeight: "700" },
 
   actions: { flexDirection: "row", paddingHorizontal: 20, marginTop: 18, justifyContent: "space-between" },
@@ -231,14 +231,14 @@ const s = StyleSheet.create({
   sectionTitle: { color: C.textPrimary, fontSize: 18, fontWeight: "800" },
   sectionLink: { color: C.primary, fontWeight: "700", fontSize: 13 },
 
-  empty: { alignItems: "center", padding: 30, marginHorizontal: 20, backgroundColor: "#fff", borderRadius: 20, borderWidth: 1, borderColor: C.border },
+  empty: { alignItems: "center", padding: 30, marginHorizontal: 20, backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.border },
   emptyTitle: { marginTop: 10, fontWeight: "700", fontSize: 15, color: C.textPrimary },
   emptySub: { marginTop: 4, color: C.textSecondary, textAlign: "center", fontSize: 13 },
   emptyBtn: { marginTop: 14, backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12 },
   emptyBtnText: { color: "#fff", fontWeight: "700" },
 
   card: {
-    marginHorizontal: 20, marginBottom: 12, backgroundColor: "#fff", borderRadius: 18, padding: 14,
+    marginHorizontal: 20, marginBottom: 12, backgroundColor: C.card, borderRadius: 18, padding: 14,
     borderWidth: 1, borderColor: C.border,
   },
   cardImg: { width: 64, height: 64, borderRadius: 14, backgroundColor: C.surfaceAlt },

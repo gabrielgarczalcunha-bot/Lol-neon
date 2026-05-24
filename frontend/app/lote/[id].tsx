@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert,
+  View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +19,7 @@ export default function LoteDetail() {
   const [lote, setLote] = useState<Lote | null>(null);
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -32,36 +33,26 @@ export default function LoteDetail() {
     })();
   }, [id]);
 
-  const buy = async () => {
+  const confirmBuy = async () => {
     if (!lote) return;
-    Alert.alert(
-      "Confirmar compra",
-      `Deseja comprar o ${lote.name} por ${fmtBRL(lote.price)}?\n\nO valor será debitado do seu saldo.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Comprar", onPress: async () => {
-            setBuying(true);
-            try {
-              await api.post(`/lotes/${lote.id}/buy`);
-              Alert.alert("Sucesso!", "Lote adquirido. Seus rendimentos começarão a partir de agora.", [
-                { text: "Ver meus lotes", onPress: () => router.replace("/(tabs)") },
-              ]);
-            } catch (e: any) {
-              Alert.alert("Erro", formatApiError(e));
-            } finally {
-              setBuying(false);
-            }
-          },
-        },
-      ]
-    );
+    setBuying(true);
+    try {
+      await api.post(`/lotes/${lote.id}/buy`);
+      setConfirmVisible(false);
+      Alert.alert("Sucesso!", "Lote adquirido. Seus rendimentos começarão a partir de agora.");
+      router.replace("/(tabs)");
+    } catch (e: any) {
+      setConfirmVisible(false);
+      Alert.alert("Erro", formatApiError(e));
+    } finally {
+      setBuying(false);
+    }
   };
 
   if (loading) return <SafeAreaView style={s.safe}><View style={s.center}><ActivityIndicator size="large" color={C.primary} /></View></SafeAreaView>;
   if (!lote) return (
     <SafeAreaView style={s.safe}>
-      <View style={s.center}><Text>Lote não encontrado.</Text></View>
+      <View style={s.center}><Text style={{ color: C.textPrimary }}>Lote não encontrado.</Text></View>
     </SafeAreaView>
   );
 
@@ -104,10 +95,9 @@ export default function LoteDetail() {
           </View>
 
           <View style={s.info}>
-            <Ionicons name="information-circle" size={16} color={C.primaryDark} />
+            <Ionicons name="information-circle" size={16} color={C.primary} />
             <Text style={s.infoText}>
-              Os rendimentos são acumulados por hora automaticamente durante {lote.duration_days} dias.
-              Você pode coletá-los a qualquer momento na sua Carteira.
+              Os rendimentos são acumulados por hora automaticamente durante {lote.duration_days} dias. Você pode coletá-los a qualquer momento na sua Carteira.
             </Text>
           </View>
         </View>
@@ -118,13 +108,32 @@ export default function LoteDetail() {
           <Text style={s.footerLabel}>Valor</Text>
           <Text style={s.footerValue}>{fmtBRL(lote.price)}</Text>
         </View>
-        <TouchableOpacity style={[s.buy, buying && { opacity: 0.7 }]} onPress={buy} disabled={buying} testID="lote-buy-button">
-          {buying ? <ActivityIndicator color="#fff" /> : <>
-            <Text style={s.buyText}>Comprar agora</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
-          </>}
+        <TouchableOpacity style={s.buy} onPress={() => setConfirmVisible(true)} testID="lote-buy-button">
+          <Text style={s.buyText}>Comprar agora</Text>
+          <Ionicons name="arrow-forward" size={18} color="#0A0612" />
         </TouchableOpacity>
       </View>
+
+      <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
+        <View style={s.modalBg}>
+          <View style={s.modalCard}>
+            <View style={s.modalIcon}><Ionicons name="cart" size={28} color={C.primary} /></View>
+            <Text style={s.modalTitle}>Confirmar compra</Text>
+            <Text style={s.modalDesc}>
+              Deseja comprar o {lote.name} por <Text style={{ color: C.primary, fontWeight: "800" }}>{fmtBRL(lote.price)}</Text>?{"\n\n"}
+              O valor será debitado do seu saldo e o rendimento começa em seguida.
+            </Text>
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => setConfirmVisible(false)} disabled={buying} testID="confirm-cancel">
+                <Text style={s.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.modalOk, buying && { opacity: 0.7 }]} onPress={confirmBuy} disabled={buying} testID="confirm-buy">
+                {buying ? <ActivityIndicator color="#0A0612" /> : <Text style={s.modalOkText}>Comprar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -132,9 +141,9 @@ export default function LoteDetail() {
 function Stat({ icon, label, value, highlight }: any) {
   return (
     <View style={[s.stat, highlight && { backgroundColor: C.primaryLight, borderColor: C.primary }]}>
-      <Ionicons name={icon} size={16} color={highlight ? C.primaryDark : C.textSecondary} />
+      <Ionicons name={icon} size={16} color={highlight ? C.primary : C.textSecondary} />
       <Text style={s.statLabel}>{label}</Text>
-      <Text style={[s.statValue, highlight && { color: C.primaryDark }]}>{value}</Text>
+      <Text style={[s.statValue, highlight && { color: C.primary }]}>{value}</Text>
     </View>
   );
 }
@@ -143,7 +152,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   img: { width: "100%", height: 280, backgroundColor: C.surfaceAlt },
-  back: { position: "absolute", top: 14, left: 14, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center" },
+  back: { position: "absolute", top: 14, left: 14, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" },
   body: { padding: 20 },
   name: { color: C.textPrimary, fontSize: 26, fontWeight: "800" },
   desc: { color: C.textSecondary, marginTop: 8, lineHeight: 20 },
@@ -156,10 +165,21 @@ const s = StyleSheet.create({
   statLabel: { color: C.textMuted, fontSize: 11, marginTop: 6 },
   statValue: { color: C.textPrimary, fontSize: 16, fontWeight: "800", marginTop: 2 },
   info: { flexDirection: "row", gap: 8, padding: 12, backgroundColor: C.primaryLight, borderRadius: 12, marginTop: 10 },
-  infoText: { flex: 1, color: C.primaryDark, fontSize: 12, lineHeight: 18 },
-  footer: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: C.border, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  infoText: { flex: 1, color: C.primary, fontSize: 12, lineHeight: 18 },
+  footer: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   footerLabel: { color: C.textMuted, fontSize: 11 },
   footerValue: { color: C.textPrimary, fontSize: 22, fontWeight: "800" },
   buy: { flex: 1, backgroundColor: C.primary, paddingVertical: 15, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  buyText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  buyText: { color: "#0A0612", fontWeight: "900", fontSize: 16 },
+
+  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 24 },
+  modalCard: { backgroundColor: C.card, borderRadius: 20, padding: 24, width: "100%", maxWidth: 380, borderWidth: 1, borderColor: C.border },
+  modalIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center", alignSelf: "center", marginBottom: 14 },
+  modalTitle: { color: C.textPrimary, fontSize: 19, fontWeight: "800", textAlign: "center" },
+  modalDesc: { color: C.textSecondary, marginTop: 10, lineHeight: 20, textAlign: "center", fontSize: 13 },
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 22 },
+  modalCancel: { flex: 1, backgroundColor: C.surfaceAlt, paddingVertical: 13, borderRadius: 12, alignItems: "center" },
+  modalCancelText: { color: C.textPrimary, fontWeight: "700" },
+  modalOk: { flex: 1, backgroundColor: C.primary, paddingVertical: 13, borderRadius: 12, alignItems: "center" },
+  modalOkText: { color: "#0A0612", fontWeight: "900" },
 });

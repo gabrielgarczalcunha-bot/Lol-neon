@@ -16,7 +16,7 @@ export default function Perfil() {
       {
         text: "Sair", style: "destructive", onPress: async () => {
           await logout();
-          router.replace("/(auth)/login");
+          router.replace("/(auth)/welcome");
         },
       },
     ]);
@@ -50,6 +50,12 @@ export default function Perfil() {
             />
           )}
           <Row
+            icon="key"
+            label="Senha de saque"
+            onPress={() => router.push("/senha-saque")}
+            testID="profile-withdraw-pwd"
+          />
+          <Row
             icon="information-circle"
             label="Sobre a empresa"
             onPress={() => router.push("/sobre")}
@@ -74,7 +80,7 @@ export default function Perfil() {
           <Text style={s.logoutText}>Sair da conta</Text>
         </TouchableOpacity>
 
-        <Text style={s.version}>LotePro • v1.0.0</Text>
+        <Text style={s.version}>Neon Farm • v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -102,7 +108,7 @@ const s = StyleSheet.create({
   roleBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginTop: 8 },
   roleText: { color: "#fff", fontWeight: "700", fontSize: 11 },
 
-  list: { backgroundColor: "#fff", marginHorizontal: 20, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: C.border },
+  list: { backgroundColor: C.card, marginHorizontal: 20, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: C.border },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
   rowIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.surfaceAlt, alignItems: "center", justifyContent: "center" },
   rowLabel: { flex: 1, color: C.textPrimary, fontWeight: "600" },

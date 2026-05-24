@@ -21,22 +21,24 @@ export default function Saque() {
   const router = useRouter();
   const [balance, setBalance] = useState(0);
   const [rules, setRules] = useState<Rules | null>(null);
+  const [hasWPwd, setHasWPwd] = useState<boolean>(false);
   const [amount, setAmount] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [keyType, setKeyType] = useState<"cpf" | "email" | "telefone" | "aleatoria">("aleatoria");
+  const [withdrawPassword, setWithdrawPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
     (async () => {
-      // Wait until a token is actually persisted before firing requests (avoids 401 race on deep link)
       const token = await loadToken();
       if (!token || cancelled) return;
       try {
-        const [w, r] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules")]);
+        const [w, r, me] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules"), api.get("/auth/me")]);
         if (cancelled) return;
         setBalance(w.data.balance || 0);
         setRules(r.data);
+        setHasWPwd(!!me.data.has_withdraw_password);
       } catch (e: any) {
         if (!cancelled) Alert.alert("Erro", formatApiError(e));
       }
@@ -51,6 +53,14 @@ export default function Saque() {
 
   const submit = async () => {
     if (!rules) return;
+    if (!hasWPwd) {
+      Alert.alert(
+        "Senha de saque necessária",
+        "Cadastre uma senha de saque para continuar.",
+        [{ text: "Cadastrar agora", onPress: () => router.push("/senha-saque?redirect=saque") }]
+      );
+      return;
+    }
     if (!gross || gross <= 0) { Alert.alert("Atenção", "Informe um valor válido."); return; }
     if (gross < rules.min_amount) {
       Alert.alert("Atenção", `Valor mínimo: ${fmtBRL(rules.min_amount)}`);
@@ -58,16 +68,18 @@ export default function Saque() {
     }
     if (gross > balance) { Alert.alert("Atenção", "Saldo insuficiente."); return; }
     if (!pixKey.trim()) { Alert.alert("Atenção", "Informe a chave PIX de destino."); return; }
+    if (!withdrawPassword) { Alert.alert("Atenção", "Informe sua senha de saque."); return; }
 
     setLoading(true);
     try {
-      await api.post("/withdrawals", { amount: gross, pix_key: pixKey.trim(), pix_key_type: keyType });
+      await api.post("/withdrawals", {
+        amount: gross, pix_key: pixKey.trim(), pix_key_type: keyType,
+        withdraw_password: withdrawPassword,
+      });
       Alert.alert(
-        "Saque solicitado!",
-        rules.is_first_withdrawal
-          ? `Você receberá ${fmtBRL(gross)} na sua chave PIX assim que o saque for aprovado.`
-          : `Valor solicitado: ${fmtBRL(gross)}\nTaxa de ${taxPct}%: ${fmtBRL(taxAmount)}\nVocê receberá: ${fmtBRL(netAmount)}`,
-        [{ text: "OK", onPress: () => router.replace("/(tabs)/carteira") }]
+        "Solicitação enviada!",
+        "Seu saque foi registrado. Aguarde até 24h para a aprovação. Você será notificado pela carteira.",
+        [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
       );
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
@@ -161,6 +173,24 @@ export default function Saque() {
               onChangeText={setPixKey}
               autoCapitalize="none"
             />
+
+            <Text style={[s.label, { marginTop: 14 }]}>Senha de saque</Text>
+            <TextInput
+              testID="withdraw-password"
+              style={s.input}
+              placeholder={hasWPwd ? "Sua senha de saque" : "Cadastre antes no Perfil"}
+              placeholderTextColor={C.textMuted}
+              value={withdrawPassword}
+              onChangeText={setWithdrawPassword}
+              secureTextEntry
+              keyboardType="number-pad"
+              editable={hasWPwd}
+            />
+            {!hasWPwd && (
+              <TouchableOpacity onPress={() => router.push("/senha-saque?redirect=saque")} testID="go-create-withdraw-pwd">
+                <Text style={{ color: C.primary, fontWeight: "700", marginTop: 8, fontSize: 12 }}>+ Cadastrar senha de saque</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={s.info}>
@@ -189,7 +219,7 @@ function Row({ k, v, negative, highlight }: any) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#fff" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card },
   back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   h1: { color: C.textPrimary, fontSize: 17, fontWeight: "800" },
 
@@ -197,10 +227,10 @@ const s = StyleSheet.create({
   balanceLabel: { color: "#D1FAE5", fontSize: 12 },
   balanceValue: { color: "#fff", fontSize: 26, fontWeight: "800", marginTop: 4 },
 
-  rules: { flexDirection: "row", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, marginBottom: 12 },
+  rules: { flexDirection: "row", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, marginBottom: 12 },
   rulesText: { flex: 1, color: C.textPrimary, fontSize: 12, fontWeight: "600" },
 
-  card: { backgroundColor: "#fff", borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
+  card: { backgroundColor: C.card, borderRadius: 18, padding: 18, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
   label: { color: C.textSecondary, fontSize: 13, fontWeight: "600" },
   amountRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, marginTop: 10, borderBottomWidth: 2, borderBottomColor: C.primary, paddingBottom: 10 },
   currency: { color: C.textPrimary, fontSize: 20, fontWeight: "700", marginBottom: 6 },

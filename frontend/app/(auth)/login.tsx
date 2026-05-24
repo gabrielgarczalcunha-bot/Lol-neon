@@ -42,8 +42,8 @@ export default function Login() {
             <View style={s.logoBox}>
               <Ionicons name="shield-checkmark" size={36} color="#fff" />
             </View>
-            <Text style={s.brandTitle}>LotePro</Text>
-            <Text style={s.brandSub}>Investimentos com rendimento diário</Text>
+            <Text style={s.brandTitle}>Neon Farm</Text>
+            <Text style={s.brandSub}>Cultive seus rendimentos</Text>
           </View>
 
           <View style={s.card}>
@@ -121,7 +121,7 @@ const s = StyleSheet.create({
   brandTitle: { fontSize: 30, fontWeight: "800", color: C.textPrimary, marginTop: 14, letterSpacing: -0.5 },
   brandSub: { fontSize: 14, color: C.textSecondary, marginTop: 4 },
   card: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.card, borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.border,
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 18, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   h1: { fontSize: 22, fontWeight: "800", color: C.textPrimary },

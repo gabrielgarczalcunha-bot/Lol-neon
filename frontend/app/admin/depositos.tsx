@@ -14,6 +14,8 @@ export default function AdminDeposits() {
   const [items, setItems] = useState<Dep[]>([]);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<string | null>(null);
+  const [rejectFor, setRejectFor] = useState<Dep | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -25,13 +27,20 @@ export default function AdminDeposits() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const act = async (id: string, action: "approve" | "reject") => {
+  const act = async (id: string, action: "approve" | "reject", reason?: string) => {
     try {
-      await api.post(`/admin/deposits/${id}/${action}`);
+      await api.post(`/admin/deposits/${id}/${action}`, action === "reject" ? { reason: reason || "" } : undefined);
       await load();
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
     }
+  };
+
+  const submitReject = async () => {
+    if (!rejectFor) return;
+    await act(rejectFor.id, "reject", rejectReason);
+    setRejectFor(null);
+    setRejectReason("");
   };
 
   return (
@@ -95,7 +104,7 @@ export default function AdminDeposits() {
                     <Ionicons name="checkmark" size={14} color="#fff" />
                     <Text style={s.actText}>Aprovar</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[s.actBtn, { backgroundColor: C.danger }]} onPress={() => act(d.id, "reject")} testID={`reject-${d.id}`}>
+                  <TouchableOpacity style={[s.actBtn, { backgroundColor: C.danger }]} onPress={() => { setRejectFor(d); setRejectReason(""); }} testID={`reject-${d.id}`}>
                     <Ionicons name="close" size={14} color="#fff" />
                     <Text style={s.actText}>Rejeitar</Text>
                   </TouchableOpacity>
@@ -118,6 +127,33 @@ export default function AdminDeposits() {
           {preview ? <Image source={{ uri: preview }} style={s.modalImg} resizeMode="contain" /> : null}
         </View>
       </Modal>
+
+      <Modal visible={!!rejectFor} transparent animationType="fade" onRequestClose={() => setRejectFor(null)}>
+        <View style={s.rejectBg}>
+          <View style={s.rejectCard}>
+            <Text style={s.rejectTitle}>Rejeitar depósito</Text>
+            <Text style={s.rejectDesc}>Esta mensagem será exibida ao usuário no histórico:</Text>
+            <TextInput
+              testID="reject-reason-input"
+              style={s.rejectInput}
+              placeholder="Ex: Comprovante inválido / valor não confere"
+              placeholderTextColor={C.textMuted}
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+              maxLength={400}
+            />
+            <View style={s.rejectActions}>
+              <TouchableOpacity style={[s.rejBtn, { backgroundColor: C.surfaceAlt }]} onPress={() => setRejectFor(null)} testID="reject-cancel">
+                <Text style={{ color: C.textPrimary, fontWeight: "700" }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.rejBtn, { backgroundColor: C.danger }]} onPress={submitReject} testID="reject-confirm">
+                <Text style={{ color: "#fff", fontWeight: "800" }}>Rejeitar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -125,15 +161,15 @@ export default function AdminDeposits() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.surface },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#fff" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card },
   back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   h1: { color: C.textPrimary, fontSize: 17, fontWeight: "800" },
-  tabs: { flexDirection: "row", padding: 12, gap: 8, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: C.border },
+  tabs: { flexDirection: "row", padding: 12, gap: 8, backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border },
   tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: C.surfaceAlt },
   tabActive: { backgroundColor: C.primary },
   tabText: { color: C.textSecondary, fontWeight: "700", fontSize: 12 },
   tabTextActive: { color: "#fff" },
-  card: { backgroundColor: "#fff", padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
+  card: { backgroundColor: C.card, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
   cardTop: { flexDirection: "row", alignItems: "center" },
   name: { fontWeight: "800", color: C.textPrimary },
   email: { color: C.textMuted, fontSize: 12, marginTop: 2 },
@@ -153,4 +189,11 @@ const s = StyleSheet.create({
   modal: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center" },
   modalImg: { width: "100%", height: "85%" },
   modalClose: { position: "absolute", top: 50, right: 20, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  rejectBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 24 },
+  rejectCard: { backgroundColor: C.card, borderRadius: 18, padding: 22, width: "100%", maxWidth: 420, borderWidth: 1, borderColor: C.border },
+  rejectTitle: { color: C.textPrimary, fontSize: 18, fontWeight: "800" },
+  rejectDesc: { color: C.textSecondary, marginTop: 6, fontSize: 13 },
+  rejectInput: { marginTop: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 12, minHeight: 90, textAlignVertical: "top", color: C.textPrimary },
+  rejectActions: { flexDirection: "row", gap: 10, marginTop: 16 },
+  rejBtn: { flex: 1, paddingVertical: 13, borderRadius: 10, alignItems: "center" },
 });

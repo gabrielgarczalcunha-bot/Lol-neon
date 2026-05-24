@@ -17,7 +17,7 @@ export default function Deposito() {
   const [step, setStep] = useState<"amount" | "pix" | "proof">("amount");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pix, setPix] = useState<{ pix_key: string; payload: string; company_name: string; pix_key_type: string } | null>(null);
+  const [pix, setPix] = useState<{ pix_key: string; payload: string; company_name: string; pix_key_type: string; display_key: string; display_key_type: string } | null>(null);
   const [proof, setProof] = useState<string | null>(null);
 
   const next = async () => {
@@ -131,9 +131,9 @@ export default function Deposito() {
                 <View style={s.qrBox}>
                   {pix?.payload ? <QRCode value={pix.payload} size={200} backgroundColor="#fff" color="#111827" /> : null}
                 </View>
-                <Text style={s.keyLabel}>Chave PIX ({pix?.pix_key_type})</Text>
+                <Text style={s.keyLabel}>Chave PIX (aleatória)</Text>
                 <View style={s.keyRow}>
-                  <Text style={s.keyValue} numberOfLines={1}>{pix?.pix_key}</Text>
+                  <Text style={s.keyValue} numberOfLines={1} testID="deposit-display-key">{pix?.display_key}</Text>
                   <TouchableOpacity onPress={() => pix && copy(pix.pix_key)} testID="copy-pix-key">
                     <Ionicons name="copy-outline" size={18} color={C.primary} />
                   </TouchableOpacity>
@@ -207,13 +207,13 @@ export default function Deposito() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#fff" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card },
   back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   h1: { color: C.textPrimary, fontSize: 17, fontWeight: "800" },
   h2: { color: C.textPrimary, fontSize: 18, fontWeight: "800", marginBottom: 6 },
   p: { color: C.textSecondary, marginBottom: 14, lineHeight: 20, fontSize: 13 },
 
-  card: { backgroundColor: "#fff", borderRadius: 18, padding: 20, borderWidth: 1, borderColor: C.border },
+  card: { backgroundColor: C.card, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: C.border },
   label: { color: C.textSecondary, fontSize: 13, fontWeight: "600" },
   amountRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, marginTop: 10, borderBottomWidth: 2, borderBottomColor: C.primary, paddingBottom: 10 },
   currency: { color: C.textPrimary, fontSize: 22, fontWeight: "700", marginBottom: 6 },
@@ -228,7 +228,7 @@ const s = StyleSheet.create({
   btn: { marginTop: 20, backgroundColor: C.primary, paddingVertical: 16, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   btnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 
-  qrBox: { padding: 16, backgroundColor: "#fff", borderWidth: 1, borderColor: C.border, borderRadius: 16, marginTop: 16 },
+  qrBox: { padding: 16, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, marginTop: 16 },
   keyLabel: { color: C.textMuted, fontSize: 11, marginTop: 14 },
   keyRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4, backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, alignSelf: "stretch" },
   keyValue: { flex: 1, color: C.textPrimary, fontWeight: "700" },

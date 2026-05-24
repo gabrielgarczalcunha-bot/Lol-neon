@@ -122,7 +122,7 @@ const s = StyleSheet.create({
   h1: { fontSize: 28, fontWeight: "800", color: C.textPrimary, marginTop: 8 },
   sub: { color: C.textSecondary, marginTop: 4, marginBottom: 20 },
   card: {
-    backgroundColor: "#fff", borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.card, borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.border,
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 18, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   label: { fontSize: 13, fontWeight: "600", color: C.textPrimary, marginTop: 10, marginBottom: 6 },

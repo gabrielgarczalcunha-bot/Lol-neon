@@ -110,7 +110,7 @@ const s = StyleSheet.create({
   emptySub: { marginTop: 4, color: C.textSecondary, textAlign: "center" },
 
   card: {
-    backgroundColor: "#fff", borderRadius: 20, marginBottom: 16, overflow: "hidden",
+    backgroundColor: C.card, borderRadius: 20, marginBottom: 16, overflow: "hidden",
     borderWidth: 1, borderColor: C.border,
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   },

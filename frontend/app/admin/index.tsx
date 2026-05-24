@@ -98,18 +98,18 @@ function Row({ icon, label, onPress, badge, testID }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.surface },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: "#fff" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card },
   back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   h1: { color: C.textPrimary, fontSize: 17, fontWeight: "800" },
 
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  stat: { flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, flexDirection: "row", alignItems: "center", gap: 10 },
+  stat: { flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, flexDirection: "row", alignItems: "center", gap: 10 },
   statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   statLabel: { color: C.textMuted, fontSize: 11 },
   statValue: { color: C.textPrimary, fontSize: 16, fontWeight: "800" },
 
   sectionTitle: { color: C.textPrimary, fontSize: 16, fontWeight: "800", marginTop: 22, marginBottom: 10 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: "#fff", borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: C.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
   rowIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.surfaceAlt, alignItems: "center", justifyContent: "center" },
   rowLabel: { flex: 1, color: C.textPrimary, fontWeight: "700" },
   badge: { backgroundColor: C.pending, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, minWidth: 24, alignItems: "center" },

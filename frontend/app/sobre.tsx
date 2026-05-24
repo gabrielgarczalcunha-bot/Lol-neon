@@ -24,7 +24,7 @@ export default function Sobre() {
         />
 
         <View style={s.body}>
-          <Text style={s.name}>LotePro Investimentos LTDA</Text>
+          <Text style={s.name}>Neon Farm LTDA</Text>
           <View style={s.row}>
             <Ionicons name="shield-checkmark" size={14} color={C.primary} />
             <Text style={s.sub}>Empresa registrada e ativa</Text>
@@ -64,21 +64,21 @@ export default function Sobre() {
 
           <View style={s.legal}>
             <Text style={s.legalTitle}>Dados da empresa</Text>
-            <LegalRow label="Razão Social" value="LotePro Investimentos LTDA" />
+            <LegalRow label="Razão Social" value="Neon Farm LTDA" />
             <LegalRow label="CNPJ" value="45.123.456/0001-90" />
             <LegalRow label="Inscrição Estadual" value="123.456.789.123" />
             <LegalRow label="Sede" value="Av. Paulista, 1000 — São Paulo/SP" />
-            <LegalRow label="Suporte" value="suporte@lotepro.com.br" />
+            <LegalRow label="Suporte" value="suporte@neonfarm.com.br" />
           </View>
 
           <View style={s.terms}>
             <Text style={s.termsTitle}>Termos e Licença</Text>
             <Text style={s.termsText}>
-              Ao utilizar o LotePro, você concorda com nossos Termos de Uso e Política de Privacidade.
+              Ao utilizar a Neon Farm, você concorda com nossos Termos de Uso e Política de Privacidade.
               Os valores investidos geram rendimentos conforme as condições de cada lote, pagos
               automaticamente em sua carteira digital. Os saques são processados em até 24h úteis após
               a solicitação, mediante verificação cadastral.{"\n\n"}
-              A LotePro mantém uma equipe ativa de especialistas em finanças e tecnologia, comprometida
+              A Neon Farm mantém uma equipe ativa de especialistas em finanças e tecnologia, comprometida
               com a transparência e com o cumprimento integral dos contratos firmados com cada usuário.
               Nosso modelo foi validado por centenas de milhares de operações executadas desde 2022.
             </Text>

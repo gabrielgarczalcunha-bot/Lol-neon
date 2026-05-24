@@ -130,7 +130,7 @@ const s = StyleSheet.create({
   sub: { color: C.textSecondary, marginTop: 2 },
 
   balanceCard: {
-    marginHorizontal: 20, marginTop: 14, backgroundColor: "#fff", borderRadius: 20, padding: 22,
+    marginHorizontal: 20, marginTop: 14, backgroundColor: C.card, borderRadius: 20, padding: 22,
     borderWidth: 1, borderColor: C.border,
     shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
   },

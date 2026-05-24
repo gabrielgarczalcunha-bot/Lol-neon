@@ -83,6 +83,8 @@ def sanitize_user(u: dict) -> dict:
     u = dict(u)
     u.pop("_id", None)
     u.pop("password_hash", None)
+    # expose whether withdraw password is set (boolean), never the hash
+    u["has_withdraw_password"] = bool(u.pop("withdraw_password_hash", None))
     return u
 
 
@@ -129,6 +131,16 @@ class WithdrawReq(BaseModel):
     amount: float = Field(gt=0)
     pix_key: str = Field(min_length=3, max_length=140)
     pix_key_type: Literal["cpf", "email", "telefone", "aleatoria"] = "aleatoria"
+    withdraw_password: str = Field(min_length=4, max_length=64)
+
+
+class SetWithdrawPassword(BaseModel):
+    password: str = Field(min_length=4, max_length=64)
+    current_password: Optional[str] = None  # required if already set
+
+
+class RejectReason(BaseModel):
+    reason: str = Field(default="", max_length=400)
 
 
 class PixSettings(BaseModel):
@@ -136,6 +148,8 @@ class PixSettings(BaseModel):
     pix_key_type: Literal["cpf", "cnpj", "email", "telefone", "aleatoria"] = "aleatoria"
     company_name: str = "LotePro Investimentos"
     beneficiary_city: str = "SAO PAULO"
+    display_key: Optional[str] = None  # masked random-looking alias shown on UI
+    display_key_type: Optional[Literal["cpf", "cnpj", "email", "telefone", "aleatoria"]] = "aleatoria"
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +176,8 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one({"id": uid}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado")
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Conta bloqueada. Contate o suporte.")
     return user
 
 
@@ -334,6 +350,8 @@ async def login(body: LoginReq):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Conta bloqueada. Contate o suporte.")
     token = create_access_token(user["id"], email, user.get("role", "user"))
     return {"token": token, "user": sanitize_user(user)}
 
@@ -476,6 +494,18 @@ async def list_transactions(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # DEPOSITS (USER)
 # ---------------------------------------------------------------------------
+@api.post("/me/withdraw-password")
+async def set_withdraw_password(body: SetWithdrawPassword, user: dict = Depends(get_current_user)):
+    current = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    existing = current.get("withdraw_password_hash")
+    if existing:
+        if not body.current_password or not verify_password(body.current_password, existing):
+            raise HTTPException(status_code=401, detail="Senha atual incorreta.")
+    new_hash = hash_password(body.password)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"withdraw_password_hash": new_hash}})
+    return {"ok": True}
+
+
 @api.post("/deposits")
 async def create_deposit(body: DepositReq, user: dict = Depends(get_current_user)):
     dep = {
@@ -524,6 +554,13 @@ async def withdrawal_rules(user: dict = Depends(get_current_user)):
 async def create_withdrawal(body: WithdrawReq, user: dict = Depends(get_current_user)):
     current = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     balance = float(current.get("balance", 0))
+
+    # Verify withdrawal password
+    wpw_hash = current.get("withdraw_password_hash")
+    if not wpw_hash:
+        raise HTTPException(status_code=400, detail="Defina sua senha de saque antes de continuar.")
+    if not verify_password(body.withdraw_password, wpw_hash):
+        raise HTTPException(status_code=401, detail="Senha de saque incorreta.")
 
     count_approved = await db.withdrawals.count_documents(
         {"user_id": user["id"], "status": "approved"}
@@ -592,19 +629,37 @@ async def my_withdrawals(user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 # SETTINGS (PIX)
 # ---------------------------------------------------------------------------
+def _make_random_pix_alias() -> str:
+    return str(uuid.uuid4())
+
+
 @api.get("/settings/pix")
 async def get_pix(amount: Optional[float] = None, user: dict = Depends(get_current_user)):
     s = await db.settings.find_one({"id": "pix"}, {"_id": 0})
     if not s:
         raise HTTPException(status_code=500, detail="Configuração PIX ausente")
+
+    real_key = s["pix_key"]
+    display_key = s.get("display_key") or ""
+    if not display_key:
+        # auto-generate a stable random-looking alias the first time it's asked
+        display_key = _make_random_pix_alias()
+        await db.settings.update_one(
+            {"id": "pix"}, {"$set": {"display_key": display_key, "display_key_type": "aleatoria"}}
+        )
+
     payload = build_pix_payload(
-        key=s["pix_key"],
+        key=real_key,
         amount=float(amount) if amount else 0.0,
         merchant_name=s.get("company_name", "LOTEPRO"),
         merchant_city=s.get("beneficiary_city", "SAO PAULO"),
     )
     return {
-        "pix_key": s["pix_key"],
+        # what the UI shows to mask the real key
+        "display_key": display_key,
+        "display_key_type": s.get("display_key_type") or "aleatoria",
+        # real key is used when the user actually copies / scans (so payment lands)
+        "pix_key": real_key,
         "pix_key_type": s["pix_key_type"],
         "company_name": s.get("company_name", "LotePro Investimentos"),
         "beneficiary_city": s.get("beneficiary_city", "SAO PAULO"),
@@ -617,7 +672,11 @@ async def get_pix(amount: Optional[float] = None, user: dict = Depends(get_curre
 # ---------------------------------------------------------------------------
 @api.put("/admin/settings/pix")
 async def admin_update_pix(body: PixSettings, admin: dict = Depends(require_admin)):
-    data = body.model_dump()
+    data = body.model_dump(exclude_none=False)
+    # If admin left display_key empty, auto-generate a random alias
+    if not data.get("display_key"):
+        data["display_key"] = _make_random_pix_alias()
+        data["display_key_type"] = "aleatoria"
     data["updated_at"] = now_iso()
     await db.settings.update_one({"id": "pix"}, {"$set": data}, upsert=True)
     s = await db.settings.find_one({"id": "pix"}, {"_id": 0})
@@ -695,13 +754,24 @@ async def admin_approve_deposit(dep_id: str, admin: dict = Depends(require_admin
 
 
 @api.post("/admin/deposits/{dep_id}/reject")
-async def admin_reject_deposit(dep_id: str, admin: dict = Depends(require_admin)):
+async def admin_reject_deposit(dep_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
     dep = await db.deposits.find_one({"id": dep_id}, {"_id": 0})
     if not dep:
         raise HTTPException(status_code=404, detail="Depósito não encontrado")
     if dep["status"] != "pending":
         raise HTTPException(status_code=400, detail="Depósito já revisado")
-    await db.deposits.update_one({"id": dep_id}, {"$set": {"status": "rejected", "reviewed_at": now_iso()}})
+    reason = (body.reason if body else "") or ""
+    await db.deposits.update_one(
+        {"id": dep_id},
+        {"$set": {"status": "rejected", "reviewed_at": now_iso(), "rejection_message": reason}},
+    )
+    if reason:
+        await db.transactions.insert_one({
+            "id": new_id(), "user_id": dep["user_id"], "type": "deposit_rejected",
+            "amount": 0.0,
+            "description": f"Depósito rejeitado: {reason}",
+            "created_at": now_iso(),
+        })
     return {"ok": True}
 
 
@@ -735,25 +805,54 @@ async def admin_approve_withdrawal(wd_id: str, admin: dict = Depends(require_adm
 
 
 @api.post("/admin/withdrawals/{wd_id}/reject")
-async def admin_reject_withdrawal(wd_id: str, admin: dict = Depends(require_admin)):
+async def admin_reject_withdrawal(wd_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
     wd = await db.withdrawals.find_one({"id": wd_id}, {"_id": 0})
     if not wd:
         raise HTTPException(status_code=404, detail="Saque não encontrado")
     if wd["status"] != "pending":
         raise HTTPException(status_code=400, detail="Saque já revisado")
+    reason = (body.reason if body else "") or ""
     # Refund reserved balance
     await db.users.update_one({"id": wd["user_id"]}, {"$inc": {"balance": float(wd["amount"])}})
-    await db.withdrawals.update_one({"id": wd_id}, {"$set": {"status": "rejected", "reviewed_at": now_iso()}})
-    await db.transactions.insert_one(
-        {
-            "id": new_id(),
-            "user_id": wd["user_id"],
-            "type": "withdraw_refund",
-            "amount": float(wd["amount"]),
-            "description": "Saque rejeitado — valor estornado",
-            "created_at": now_iso(),
-        }
+    await db.withdrawals.update_one(
+        {"id": wd_id},
+        {"$set": {"status": "rejected", "reviewed_at": now_iso(), "rejection_message": reason}},
     )
+    desc = "Saque rejeitado — valor estornado"
+    if reason:
+        desc = f"Saque rejeitado: {reason} — valor estornado"
+    await db.transactions.insert_one({
+        "id": new_id(), "user_id": wd["user_id"], "type": "withdraw_refund",
+        "amount": float(wd["amount"]),
+        "description": desc,
+        "created_at": now_iso(),
+    })
+    return {"ok": True}
+
+
+@api.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(user_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Não é possível bloquear outro administrador.")
+    reason = (body.reason if body else "") or ""
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"banned": True, "banned_at": now_iso(), "banned_reason": reason}},
+    )
+    return {"ok": True}
+
+
+@api.post("/admin/users/{user_id}/unban")
+async def admin_unban_user(user_id: str, admin: dict = Depends(require_admin)):
+    res = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"banned": False}, "$unset": {"banned_at": "", "banned_reason": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
     return {"ok": True}
 
 
