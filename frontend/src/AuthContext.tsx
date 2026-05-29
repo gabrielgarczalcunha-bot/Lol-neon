@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { api, saveToken, loadToken, clearToken } from "./api";
+import { enableDemoMode, disableDemoMode, isDemoMode } from "./demoMode";
 
 export type User = {
   id: string;
@@ -13,8 +14,10 @@ export type User = {
 type AuthState = {
   user: User | null;
   loading: boolean;
+  demo: boolean;
   login: (email: string, password: string) => Promise<User>;
   register: (name: string, email: string, password: string, referralCode?: string) => Promise<User>;
+  loginDemo: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -24,9 +27,11 @@ const Ctx = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demo, setDemo] = useState(false);
 
   useEffect(() => {
     (async () => {
+      setDemo(isDemoMode());
       const t = await loadToken();
       if (!t) { setLoading(false); return; }
       try {
@@ -58,7 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user as User;
   };
 
+  const loginDemo = async () => {
+    await enableDemoMode();
+    setDemo(true);
+    const { data } = await api.post("/auth/login", { email: "demo@neonfarm.app", password: "demo" });
+    await saveToken(data.token);
+    setUser(data.user);
+    return data.user as User;
+  };
+
   const logout = async () => {
+    if (isDemoMode()) {
+      await disableDemoMode();
+      setDemo(false);
+    }
     await clearToken();
     setUser(null);
   };
@@ -73,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout, refresh }}>
+    <Ctx.Provider value={{ user, loading, demo, login, register, loginDemo, logout, refresh }}>
       {children}
     </Ctx.Provider>
   );

@@ -76,6 +76,10 @@ export async function initApiBase() {
       api.defaults.baseURL = `${CURRENT_BASE}/api`;
     }
   } catch {}
+  try {
+    const { loadDemoFlag } = await import("./demoMode");
+    await loadDemoFlag();
+  } catch {}
 }
 
 // Constants used by login screen for diagnostics
@@ -98,6 +102,20 @@ export async function loadToken(): Promise<string | null> { return await storage
 export async function clearToken() { await storageDel(TOKEN_KEY); }
 
 api.interceptors.request.use(async (config) => {
+  // Demo / offline mode — short-circuit every request with mocked data
+  try {
+    const { isDemoMode, demoHandle } = await import("./demoMode");
+    if (isDemoMode()) {
+      const url = (config.url || "").replace(/^\/+/, "");
+      const method = (config.method || "get").toUpperCase();
+      const body = typeof config.data === "string" ? safeJson(config.data) : config.data;
+      const resp = await demoHandle(method, url, body);
+      if (resp) {
+        // Throw a fake adapter response that axios understands
+        config.adapter = async () => resp;
+      }
+    }
+  } catch {}
   const token = await loadToken();
   if (token) {
     config.headers = config.headers || {};
@@ -105,6 +123,8 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+function safeJson(s: string): any { try { return JSON.parse(s); } catch { return s; } }
 
 // Retry once on transient network errors (timeout / no response).
 api.interceptors.response.use(
