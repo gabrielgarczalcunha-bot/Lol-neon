@@ -14,7 +14,7 @@ type AuthState = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
-  register: (name: string, email: string, password: string) => Promise<User>;
+  register: (name: string, email: string, password: string, referralCode?: string) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -47,8 +47,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user as User;
   };
 
-  const register = async (name: string, email: string, password: string) => {
-    const { data } = await api.post("/auth/register", { name, email, password });
+  const register = async (name: string, email: string, password: string, referralCode?: string) => {
+    const payload: any = { name, email, password };
+    if (referralCode && referralCode.trim()) {
+      payload.referral_code = referralCode.trim().toUpperCase();
+    }
+    const { data } = await api.post("/auth/register", payload);
     await saveToken(data.token);
     setUser(data.user);
     return data.user as User;

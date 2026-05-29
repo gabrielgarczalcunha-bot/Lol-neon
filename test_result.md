@@ -101,3 +101,82 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Validate new Neon Farm backend features: referral system, in-app notifications, IP tracking + IP/user ban flow, plus regression on login/register/me, deposits, withdrawals, PIX settings."
+
+backend:
+  - task: "Referral system (register with referral_code, /me/referrals, bonus on first approved deposit)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "All referral flows verified end-to-end. POST /auth/register without code returns referral_code in user. Register with valid code links the referral (GET /me/referrals shows total_referrals=1, paid_referrals=0). Register with referral_code='INVALID999' returns 400 'Código de indicação inválido'. Schema of /me/referrals matches spec (code, bonus_pct=10, bonus_cap=50, total_referrals, paid_referrals, total_earned, referrals[]). When admin approves user B's first deposit (R$200), user A's balance increased by exactly R$20 (10% of 200, under R$50 cap) — capping logic correct. A also got a kind='referral' notification and B got a kind='deposit' notification. paid_referrals → 1 and total_earned → 20.0 after approval."
+
+  - task: "Notifications endpoints (list, unread-count, read, read-all) and notifications fired on deposit/withdrawal admin actions"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /me/notifications returns { items: [...], unread: N }. GET /me/notifications/unread-count returns { unread: N }. POST /me/notifications/{id}/read marks one read; POST /me/notifications/read-all sets all to read (unread-count becomes 0 afterwards). Notifications are created on: deposit approve (kind='deposit'), deposit reject (kind='deposit'), withdrawal approve (kind='withdraw'), referral bonus paid (kind='referral'), and on new pending referral signup (kind='referral')."
+
+  - task: "IP tracking + geolocation snapshot on register/login (admin/users + admin/users/{id}/ips)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "GET /api/admin/users returns last_ip, last_ip_city, last_ip_country, last_ip_country_code, last_ip_isp, last_login_at on each user. In the public preview environment the detected IP is a real public IP (34.170.12.145 / Google LLC / Council Bluffs, US) — geolocation worked. GET /api/admin/users/{user_id}/ips returns { user: {...}, logs: [{ip, action, city, country, banned, created_at, ...}] } as specified, with 'banned' flag correctly computed against banned_ips collection."
+
+  - task: "IP ban / unban flow (ban user, login blocked, /admin/banned-ips, DELETE banned-ips/{ip}, unban user removes IPs)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "POST /admin/users/{id}/ban with { reason: 'test' } returns { ok: true, banned_ips: [...], ip_count: N } and sets user's banned=true. Subsequent POST /auth/login for that user returns 403 'Conta bloqueada. Contate o suporte.' GET /admin/banned-ips returns list (admin-only, 403 for normal user). DELETE /admin/banned-ips/{ip} returns 200 and removes the IP. POST /admin/users/{id}/unban returns { ok: true, ips_unbanned: N } and lifts user-level ban — banned user could log in again afterwards. Non-admin access to /admin/banned-ips and /admin/users returns 403 as expected. No 500 errors observed."
+
+  - task: "Regression: login/register/me, deposit create+approve+reject, withdrawal create (with withdraw_password) + approve, PIX settings"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "Admin login (ggc@gmail.com) succeeds and GET /auth/me returns admin user. GET /api/settings/pix returns full schema (display_key, display_key_type, pix_key, pix_key_type, company_name, beneficiary_city, payload). Deposit creation works; admin approve credits user balance and pushes deposit notification; admin reject pushes deposit notification. Withdrawal creation without prior /me/withdraw-password returns 400 'Defina sua senha de saque antes de continuar.' Setting withdraw password (POST /me/withdraw-password) works; subsequent withdrawal with the correct password succeeds; admin approve fires a kind='withdraw' notification."
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+      message: "Executed full backend test suite (/app/backend_test.py) against the public preview URL. 48/49 assertions passed; the single 'fail' was an incorrect assertion in my own test (I asserted total_earned >= R$50 but with a R$200 deposit the correct 10% bonus is R$20, well under the R$50 cap — the system computed it correctly, my expectation was wrong). All referral, notification, IP tracking, ban/unban and regression flows behave per spec. Note: the worker pod observes real public IPs (Google LLC), so banned_ips was populated and DELETE/list endpoints were fully exercised — not a private-IP edge case in this run. No 500 errors. No schema mismatches."

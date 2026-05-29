@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform, KeyboardAvoidingView,
+  View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform, KeyboardAvoidingView, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,6 +27,7 @@ export default function Saque() {
   const [keyType, setKeyType] = useState<"cpf" | "email" | "telefone" | "aleatoria">("aleatoria");
   const [withdrawPassword, setWithdrawPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -76,11 +77,7 @@ export default function Saque() {
         amount: gross, pix_key: pixKey.trim(), pix_key_type: keyType,
         withdraw_password: withdrawPassword,
       });
-      Alert.alert(
-        "Solicitação enviada!",
-        "Seu saque foi registrado. Aguarde até 24h para a aprovação. Você será notificado pela carteira.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
-      );
+      setSuccessOpen(true);
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
     } finally {
@@ -199,10 +196,30 @@ export default function Saque() {
           </View>
 
           <TouchableOpacity style={[s.btn, loading && { opacity: 0.7 }]} onPress={submit} disabled={loading} testID="withdraw-submit">
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Solicitar saque</Text>}
+            {loading ? <ActivityIndicator color="#0A0612" /> : <Text style={s.btnText}>Solicitar saque</Text>}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={successOpen} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={s.successBg}>
+          <View style={s.successCard}>
+            <View style={s.successIcon}><Ionicons name="checkmark-circle" size={56} color={C.primary} /></View>
+            <Text style={s.successTitle}>Saque solicitado!</Text>
+            <Text style={s.successDesc}>
+              Aguarde até <Text style={{ fontWeight: "800", color: C.primary }}>24 horas</Text> para a aprovação do seu saque.{"\n\n"}
+              Você receberá o PIX assim que o administrador aprovar.
+            </Text>
+            <TouchableOpacity
+              style={s.successBtn}
+              onPress={() => { setSuccessOpen(false); router.replace("/(tabs)"); }}
+              testID="withdraw-success-ok"
+            >
+              <Text style={s.successBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -255,5 +272,12 @@ const s = StyleSheet.create({
   infoText: { flex: 1, color: C.primaryDark, fontSize: 12, lineHeight: 18 },
 
   btn: { marginTop: 18, backgroundColor: C.primary, paddingVertical: 16, borderRadius: 14, alignItems: "center" },
-  btnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  btnText: { color: "#0A0612", fontWeight: "900", fontSize: 16 },
+  successBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center", padding: 24 },
+  successCard: { backgroundColor: C.card, borderRadius: 22, padding: 28, width: "100%", maxWidth: 380, borderWidth: 1, borderColor: C.border, alignItems: "center" },
+  successIcon: { width: 90, height: 90, borderRadius: 45, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center" },
+  successTitle: { color: C.textPrimary, fontSize: 22, fontWeight: "900", marginTop: 14, textAlign: "center" },
+  successDesc: { color: C.textSecondary, marginTop: 12, fontSize: 14, lineHeight: 22, textAlign: "center" },
+  successBtn: { marginTop: 22, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 12, alignItems: "center", alignSelf: "stretch" },
+  successBtnText: { color: "#0A0612", fontWeight: "900", fontSize: 15 },
 });

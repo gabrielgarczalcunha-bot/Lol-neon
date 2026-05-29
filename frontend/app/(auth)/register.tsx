@@ -16,11 +16,12 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
     if (!name.trim() || !email.trim() || !password) {
-      Alert.alert("Atenção", "Preencha todos os campos.");
+      Alert.alert("Atenção", "Preencha todos os campos obrigatórios.");
       return;
     }
     if (password.length < 6) {
@@ -29,7 +30,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await register(name.trim(), email.trim(), password);
+      await register(name.trim(), email.trim(), password, referralCode || undefined);
       router.replace("/(tabs)");
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
@@ -90,6 +91,22 @@ export default function Register() {
                 placeholderTextColor={C.textMuted}
                 value={password}
                 onChangeText={setPassword}
+              />
+            </View>
+
+            <Text style={s.label}>Código de indicação <Text style={{ color: C.textMuted, fontWeight: "400" }}>(opcional)</Text></Text>
+            <View style={s.inputWrap}>
+              <Ionicons name="gift-outline" size={18} color={C.textMuted} />
+              <TextInput
+                testID="register-referral-input"
+                style={s.input}
+                placeholder="Ex: AB23XY"
+                placeholderTextColor={C.textMuted}
+                value={referralCode}
+                onChangeText={(t) => setReferralCode(t.toUpperCase())}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={8}
               />
             </View>
 

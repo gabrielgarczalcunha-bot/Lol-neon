@@ -25,14 +25,20 @@ export default function Home() {
   const [mine, setMine] = useState<MyLote[]>([]);
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(false);
+  const [unread, setUnread] = useState(0);
   const tickRef = useRef<any>(null);
   const [tick, setTick] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const [w, m] = await Promise.all([api.get("/wallet"), api.get("/me/lotes")]);
+      const [w, m, n] = await Promise.all([
+        api.get("/wallet"),
+        api.get("/me/lotes"),
+        api.get("/me/notifications/unread-count").catch(() => ({ data: { unread: 0 } })),
+      ]);
       setWallet(w.data);
       setMine(m.data);
+      setUnread(n.data.unread || 0);
     } catch {}
   }, []);
 
@@ -87,10 +93,18 @@ export default function Home() {
         refreshControl={<RefreshControl refreshing={refresh} onRefresh={onRefresh} tintColor={C.primary} />}
       >
         <View style={s.header}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={s.hi}>Olá,</Text>
             <Text style={s.name} numberOfLines={1}>{user?.name?.split(" ")[0] || "investidor"}</Text>
           </View>
+          <TouchableOpacity onPress={() => router.push("/notificacoes")} style={s.bellBtn} testID="home-notifications">
+            <Ionicons name="notifications" size={20} color={C.textPrimary} />
+            {unread > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{unread > 9 ? "9+" : String(unread)}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/(tabs)/perfil")} style={s.avatar} testID="home-profile-button">
             <Text style={s.avatarText}>{(user?.name || "U").substring(0, 1).toUpperCase()}</Text>
           </TouchableOpacity>
@@ -207,7 +221,10 @@ const s = StyleSheet.create({
   hi: { color: C.textMuted, fontSize: 13 },
   name: { color: C.textPrimary, fontSize: 22, fontWeight: "800", marginTop: 2 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontWeight: "800" },
+  avatarText: { color: "#0A0612", fontWeight: "800" },
+  bellBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  badge: { position: "absolute", top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.danger, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
 
   hero: {
     marginHorizontal: 20, marginTop: 10, backgroundColor: C.primary, borderRadius: 24, padding: 22,

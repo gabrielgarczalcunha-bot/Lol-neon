@@ -65,6 +65,7 @@ export default function AdminHome() {
         <Row icon="arrow-up-circle" label="Aprovar Saques" badge={stats.pending_withdrawals} onPress={() => router.push("/admin/saques")} testID="admin-withdrawals" />
         <Row icon="cube" label="Gerenciar Lotes" onPress={() => router.push("/admin/lotes")} testID="admin-lotes" />
         <Row icon="people" label="Usuários" onPress={() => router.push("/admin/usuarios")} testID="admin-users" />
+        <Row icon="ban" label="IPs Bloqueados" onPress={() => router.push("/admin/ips-bloqueados")} testID="admin-blocked-ips" />
         <Row icon="key" label="Configurar Chave PIX" onPress={() => router.push("/admin/pix")} testID="admin-pix" />
       </ScrollView>
     </SafeAreaView>

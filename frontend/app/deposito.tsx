@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform,
-  KeyboardAvoidingView, Image,
+  KeyboardAvoidingView, Image, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +19,7 @@ export default function Deposito() {
   const [loading, setLoading] = useState(false);
   const [pix, setPix] = useState<{ pix_key: string; payload: string; company_name: string; pix_key_type: string; display_key: string; display_key_type: string } | null>(null);
   const [proof, setProof] = useState<string | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
 
   const next = async () => {
     const v = parseFloat(amount.replace(",", "."));
@@ -60,11 +61,7 @@ export default function Deposito() {
     setLoading(true);
     try {
       await api.post("/deposits", { amount: v, proof_image: proof });
-      Alert.alert(
-        "Solicitação enviada!",
-        "Seu comprovante foi recebido. Assim que o pagamento for confirmado pelo nosso time, o saldo será creditado na sua carteira.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)/carteira") }]
-      );
+      setSuccessOpen(true);
     } catch (e: any) {
       Alert.alert("Erro", formatApiError(e));
     } finally {
@@ -201,6 +198,28 @@ export default function Deposito() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={successOpen} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={s.successBg}>
+          <View style={s.successCard}>
+            <View style={s.successIcon}>
+              <Ionicons name="checkmark-circle" size={56} color={C.primary} />
+            </View>
+            <Text style={s.successTitle}>Solicitação enviada!</Text>
+            <Text style={s.successDesc}>
+              Aguarde até <Text style={{ fontWeight: "800", color: C.primary }}>24 horas</Text> para a aprovação do seu depósito.{"\n\n"}
+              Você será notificado na sua carteira assim que o pagamento for confirmado.
+            </Text>
+            <TouchableOpacity
+              style={s.successBtn}
+              onPress={() => { setSuccessOpen(false); router.replace("/(tabs)"); }}
+              testID="deposit-success-ok"
+            >
+              <Text style={s.successBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -241,4 +260,11 @@ const s = StyleSheet.create({
   preview: { width: "100%", height: 260 },
   changeBtn: { marginTop: 10, alignSelf: "center", flexDirection: "row", gap: 4, alignItems: "center", backgroundColor: C.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   changeBtnText: { color: C.primaryDark, fontWeight: "700", fontSize: 12 },
+  successBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", alignItems: "center", justifyContent: "center", padding: 24 },
+  successCard: { backgroundColor: C.card, borderRadius: 22, padding: 28, width: "100%", maxWidth: 380, borderWidth: 1, borderColor: C.border, alignItems: "center" },
+  successIcon: { width: 90, height: 90, borderRadius: 45, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  successTitle: { color: C.textPrimary, fontSize: 22, fontWeight: "900", marginTop: 14, textAlign: "center" },
+  successDesc: { color: C.textSecondary, marginTop: 12, fontSize: 14, lineHeight: 22, textAlign: "center" },
+  successBtn: { marginTop: 22, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 12, alignItems: "center", alignSelf: "stretch" },
+  successBtnText: { color: "#0A0612", fontWeight: "900", fontSize: 15 },
 });

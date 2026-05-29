@@ -10,10 +10,12 @@ import logging
 import secrets
 import bcrypt
 import jwt
+import httpx
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, status, Body
 from fastapi.security import HTTPBearer
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -79,6 +81,137 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
+def new_referral_code() -> str:
+    """Short, friendly user-shareable code."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(6))
+
+
+REFERRAL_BONUS_PCT = 10.0   # 10% bonus to referrer
+REFERRAL_BONUS_CAP = 50.0   # capped at R$ 50 per referral
+
+
+async def push_notification(user_id: str, title: str, body: str, kind: str = "info", link: Optional[str] = None):
+    """Persist an in-app notification for the given user."""
+    try:
+        await db.notifications.insert_one({
+            "id": new_id(),
+            "user_id": user_id,
+            "title": title,
+            "body": body,
+            "kind": kind,           # "deposit" | "withdraw" | "referral" | "info"
+            "link": link,
+            "read": False,
+            "created_at": now_iso(),
+        })
+    except Exception as e:
+        log.warning(f"push_notification failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# IP / GEO HELPERS
+# ---------------------------------------------------------------------------
+def get_client_ip(request: Request) -> str:
+    """Return the real client IP, honoring proxy headers."""
+    headers = request.headers
+    fwd = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For")
+    if fwd:
+        # may contain multiple IPs separated by comma — take the first
+        return fwd.split(",")[0].strip()
+    real = headers.get("x-real-ip") or headers.get("X-Real-IP")
+    if real:
+        return real.strip()
+    cf = headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    return (request.client.host if request.client else "0.0.0.0") or "0.0.0.0"
+
+
+def is_private_ip(ip: str) -> bool:
+    if not ip or ip in ("0.0.0.0", "127.0.0.1", "::1", "localhost"):
+        return True
+    try:
+        parts = ip.split(".")
+        if len(parts) == 4:
+            a = int(parts[0]); b = int(parts[1])
+            if a == 10: return True
+            if a == 172 and 16 <= b <= 31: return True
+            if a == 192 and b == 168: return True
+            if a == 169 and b == 254: return True
+    except Exception:
+        pass
+    return False
+
+
+async def geolocate_ip(ip: str) -> dict:
+    """Free IP geolocation via ip-api.com (45 req/min). Returns dict with country/city/etc."""
+    if not ip or is_private_ip(ip):
+        return {"country": "Local", "country_code": "", "region": "", "city": "Rede privada", "lat": None, "lon": None, "isp": ""}
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,lat,lon,isp,query"
+        async with httpx.AsyncClient(timeout=4.0) as cli:
+            r = await cli.get(url)
+            d = r.json()
+        if d.get("status") != "success":
+            return {"country": "Desconhecido", "country_code": "", "region": "", "city": "", "lat": None, "lon": None, "isp": ""}
+        return {
+            "country": d.get("country", ""),
+            "country_code": d.get("countryCode", ""),
+            "region": d.get("regionName", ""),
+            "city": d.get("city", ""),
+            "lat": d.get("lat"),
+            "lon": d.get("lon"),
+            "isp": d.get("isp", ""),
+        }
+    except Exception as e:
+        log.warning(f"geolocate_ip failed for {ip}: {e}")
+        return {"country": "Desconhecido", "country_code": "", "region": "", "city": "", "lat": None, "lon": None, "isp": ""}
+
+
+async def is_ip_banned(ip: str) -> Optional[dict]:
+    """Return banned doc if this IP is banned, else None."""
+    if not ip or is_private_ip(ip):
+        return None
+    return await db.banned_ips.find_one({"ip": ip}, {"_id": 0})
+
+
+async def record_user_ip(user_id: str, ip: str, action: str):
+    """Persist an IP visit + update user's last IP/location snapshot."""
+    geo = await geolocate_ip(ip)
+    record = {
+        "id": new_id(),
+        "user_id": user_id,
+        "ip": ip,
+        "action": action,        # "register" | "login" | "request"
+        "country": geo.get("country"),
+        "country_code": geo.get("country_code"),
+        "region": geo.get("region"),
+        "city": geo.get("city"),
+        "lat": geo.get("lat"),
+        "lon": geo.get("lon"),
+        "isp": geo.get("isp"),
+        "created_at": now_iso(),
+    }
+    try:
+        await db.user_ip_logs.insert_one(record)
+    except Exception as e:
+        log.warning(f"user_ip_logs insert failed: {e}")
+
+    snapshot = {
+        "last_ip": ip,
+        "last_ip_country": geo.get("country"),
+        "last_ip_country_code": geo.get("country_code"),
+        "last_ip_region": geo.get("region"),
+        "last_ip_city": geo.get("city"),
+        "last_ip_lat": geo.get("lat"),
+        "last_ip_lon": geo.get("lon"),
+        "last_ip_isp": geo.get("isp"),
+        "last_login_at": now_iso(),
+    }
+    await db.users.update_one({"id": user_id}, {"$set": snapshot})
+    return geo
+
+
 def sanitize_user(u: dict) -> dict:
     u = dict(u)
     u.pop("_id", None)
@@ -95,6 +228,7 @@ class RegisterReq(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     email: EmailStr
     password: str = Field(min_length=6, max_length=120)
+    referral_code: Optional[str] = None
 
 
 class LoginReq(BaseModel):
@@ -282,6 +416,27 @@ async def startup():
     await db.transactions.create_index([("user_id", 1), ("created_at", -1)])
     await db.deposits.create_index([("status", 1), ("created_at", -1)])
     await db.withdrawals.create_index([("status", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.referrals.create_index([("referrer_id", 1), ("created_at", -1)])
+    await db.referrals.create_index("referred_id", unique=True)
+    await db.user_ip_logs.create_index([("user_id", 1), ("created_at", -1)])
+    await db.user_ip_logs.create_index("ip")
+    await db.banned_ips.create_index("ip", unique=True)
+
+    # Backfill referral_code on users that don't have one yet
+    async for u in db.users.find({"referral_code": {"$exists": False}}, {"_id": 0, "id": 1}):
+        code = new_referral_code()
+        # ensure uniqueness
+        for _ in range(5):
+            if not await db.users.find_one({"referral_code": code}):
+                break
+            code = new_referral_code()
+        await db.users.update_one({"id": u["id"]}, {"$set": {"referral_code": code}})
+
+    try:
+        await db.users.create_index("referral_code", unique=True, sparse=True)
+    except Exception:
+        pass
 
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
     if not existing:
@@ -326,10 +481,36 @@ async def shutdown():
 # AUTH ROUTES
 # ---------------------------------------------------------------------------
 @api.post("/auth/register")
-async def register(body: RegisterReq):
+async def register(body: RegisterReq, request: Request):
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email já cadastrado")
+
+    # Block registrations from banned IPs
+    client_ip = get_client_ip(request)
+    banned = await is_ip_banned(client_ip)
+    if banned:
+        raise HTTPException(status_code=403, detail="Acesso bloqueado a partir deste IP.")
+
+    # generate unique referral code
+    code = new_referral_code()
+    for _ in range(5):
+        if not await db.users.find_one({"referral_code": code}):
+            break
+        code = new_referral_code()
+
+    # validate referral_code if provided
+    referred_by_id = None
+    referred_by_code = None
+    if body.referral_code:
+        rc = body.referral_code.strip().upper()
+        if rc:
+            ref = await db.users.find_one({"referral_code": rc}, {"_id": 0, "id": 1, "name": 1})
+            if not ref:
+                raise HTTPException(status_code=400, detail="Código de indicação inválido")
+            referred_by_id = ref["id"]
+            referred_by_code = rc
+
     user = {
         "id": new_id(),
         "name": body.name.strip(),
@@ -337,21 +518,62 @@ async def register(body: RegisterReq):
         "password_hash": hash_password(body.password),
         "role": "user",
         "balance": 0.0,
+        "referral_code": code,
+        "referred_by": referred_by_id,
+        "referred_by_code": referred_by_code,
         "created_at": now_iso(),
+        "register_ip": client_ip,
     }
     await db.users.insert_one(user)
+
+    # record IP visit + geo
+    await record_user_ip(user["id"], client_ip, "register")
+
+    if referred_by_id:
+        # track pending referral; bonus credited when this user has first approved deposit
+        await db.referrals.insert_one({
+            "id": new_id(),
+            "referrer_id": referred_by_id,
+            "referred_id": user["id"],
+            "referred_name": user["name"],
+            "referred_email": email,
+            "bonus_amount": 0.0,
+            "status": "pending",
+            "created_at": now_iso(),
+            "paid_at": None,
+        })
+        await push_notification(
+            referred_by_id,
+            "Novo indicado!",
+            f"{user['name']} entrou pelo seu código. Você ganhará bônus no primeiro depósito aprovado dele.",
+            kind="referral",
+            link="/indicacao",
+        )
+
     token = create_access_token(user["id"], email, "user")
     return {"token": token, "user": sanitize_user(user)}
 
 
 @api.post("/auth/login")
-async def login(body: LoginReq):
+async def login(body: LoginReq, request: Request):
     email = body.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     if user.get("banned"):
         raise HTTPException(status_code=403, detail="Conta bloqueada. Contate o suporte.")
+
+    client_ip = get_client_ip(request)
+
+    # Block by IP for non-admin users
+    if user.get("role") != "admin":
+        banned = await is_ip_banned(client_ip)
+        if banned:
+            raise HTTPException(status_code=403, detail="Acesso bloqueado a partir deste IP.")
+
+    # record IP visit + geo
+    await record_user_ip(user["id"], client_ip, "login")
+
     token = create_access_token(user["id"], email, user.get("role", "user"))
     return {"token": token, "user": sanitize_user(user)}
 
@@ -750,11 +972,48 @@ async def admin_approve_deposit(dep_id: str, admin: dict = Depends(require_admin
             "created_at": now_iso(),
         }
     )
+    await push_notification(
+        dep["user_id"],
+        "Depósito aprovado!",
+        f"Seu depósito de R$ {float(dep['amount']):.2f} foi creditado na sua carteira.",
+        kind="deposit",
+        link="/(tabs)/carteira",
+    )
+
+    # ----- Referral bonus on first approved deposit -----
+    referral = await db.referrals.find_one({"referred_id": dep["user_id"], "status": "pending"})
+    if referral:
+        bonus = round(min(float(dep["amount"]) * REFERRAL_BONUS_PCT / 100.0, REFERRAL_BONUS_CAP), 2)
+        if bonus > 0:
+            await db.users.update_one({"id": referral["referrer_id"]}, {"$inc": {"balance": bonus}})
+            await db.referrals.update_one(
+                {"id": referral["id"]},
+                {"$set": {"bonus_amount": bonus, "status": "paid", "paid_at": now_iso()}},
+            )
+            await db.transactions.insert_one({
+                "id": new_id(),
+                "user_id": referral["referrer_id"],
+                "type": "referral_bonus",
+                "amount": bonus,
+                "description": f"Bônus de indicação ({referral.get('referred_name','')})",
+                "created_at": now_iso(),
+            })
+            await push_notification(
+                referral["referrer_id"],
+                "Bônus de indicação recebido!",
+                f"Você ganhou R$ {bonus:.2f} pelo primeiro depósito de {referral.get('referred_name','seu indicado')}.",
+                kind="referral",
+                link="/indicacao",
+            )
     return {"ok": True}
 
 
 @api.post("/admin/deposits/{dep_id}/reject")
-async def admin_reject_deposit(dep_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
+async def admin_reject_deposit(
+    dep_id: str,
+    body: Optional[RejectReason] = Body(default=None),
+    admin: dict = Depends(require_admin),
+):
     dep = await db.deposits.find_one({"id": dep_id}, {"_id": 0})
     if not dep:
         raise HTTPException(status_code=404, detail="Depósito não encontrado")
@@ -772,6 +1031,14 @@ async def admin_reject_deposit(dep_id: str, body: RejectReason = None, admin: di
             "description": f"Depósito rejeitado: {reason}",
             "created_at": now_iso(),
         })
+    await push_notification(
+        dep["user_id"],
+        "Depósito rejeitado",
+        (f"Seu depósito de R$ {float(dep['amount']):.2f} foi rejeitado. Motivo: {reason}"
+         if reason else f"Seu depósito de R$ {float(dep['amount']):.2f} foi rejeitado. Confira os detalhes."),
+        kind="deposit",
+        link="/(tabs)/carteira",
+    )
     return {"ok": True}
 
 
@@ -801,11 +1068,22 @@ async def admin_approve_withdrawal(wd_id: str, admin: dict = Depends(require_adm
             "created_at": now_iso(),
         }
     )
+    await push_notification(
+        wd["user_id"],
+        "Saque aprovado!",
+        f"Seu saque de R$ {float(wd.get('net_amount', wd['amount'])):.2f} foi enviado para sua chave PIX.",
+        kind="withdraw",
+        link="/(tabs)/carteira",
+    )
     return {"ok": True}
 
 
 @api.post("/admin/withdrawals/{wd_id}/reject")
-async def admin_reject_withdrawal(wd_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
+async def admin_reject_withdrawal(
+    wd_id: str,
+    body: Optional[RejectReason] = Body(default=None),
+    admin: dict = Depends(require_admin),
+):
     wd = await db.withdrawals.find_one({"id": wd_id}, {"_id": 0})
     if not wd:
         raise HTTPException(status_code=404, detail="Saque não encontrado")
@@ -827,11 +1105,23 @@ async def admin_reject_withdrawal(wd_id: str, body: RejectReason = None, admin: 
         "description": desc,
         "created_at": now_iso(),
     })
+    await push_notification(
+        wd["user_id"],
+        "Saque rejeitado",
+        (f"Seu saque foi rejeitado. Motivo: {reason}. O valor foi estornado para sua carteira."
+         if reason else "Seu saque foi rejeitado. O valor foi estornado para sua carteira."),
+        kind="withdraw",
+        link="/(tabs)/carteira",
+    )
     return {"ok": True}
 
 
 @api.post("/admin/users/{user_id}/ban")
-async def admin_ban_user(user_id: str, body: RejectReason = None, admin: dict = Depends(require_admin)):
+async def admin_ban_user(
+    user_id: str,
+    body: Optional[RejectReason] = Body(default=None),
+    admin: dict = Depends(require_admin),
+):
     target = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -842,17 +1132,186 @@ async def admin_ban_user(user_id: str, body: RejectReason = None, admin: dict = 
         {"id": user_id},
         {"$set": {"banned": True, "banned_at": now_iso(), "banned_reason": reason}},
     )
-    return {"ok": True}
+
+    # Collect every IP ever used by this user + last_ip + register_ip
+    ips = set()
+    if target.get("last_ip"): ips.add(target["last_ip"])
+    if target.get("register_ip"): ips.add(target["register_ip"])
+    async for log_entry in db.user_ip_logs.find({"user_id": user_id}, {"_id": 0, "ip": 1}):
+        if log_entry.get("ip"): ips.add(log_entry["ip"])
+
+    banned_ips = []
+    for ip in ips:
+        if not ip or is_private_ip(ip):
+            continue
+        try:
+            await db.banned_ips.update_one(
+                {"ip": ip},
+                {"$set": {
+                    "ip": ip,
+                    "user_id": user_id,
+                    "user_email": target.get("email", ""),
+                    "user_name": target.get("name", ""),
+                    "reason": reason,
+                    "banned_at": now_iso(),
+                    "banned_by_admin": admin.get("email", ""),
+                }},
+                upsert=True,
+            )
+            banned_ips.append(ip)
+        except Exception as e:
+            log.warning(f"Failed to ban IP {ip}: {e}")
+    return {"ok": True, "banned_ips": banned_ips, "ip_count": len(banned_ips)}
 
 
 @api.post("/admin/users/{user_id}/unban")
 async def admin_unban_user(user_id: str, admin: dict = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
     res = await db.users.update_one(
         {"id": user_id},
         {"$set": {"banned": False}, "$unset": {"banned_at": "", "banned_reason": ""}},
     )
+    # Remove all IPs associated with this user from banned_ips
+    removed = await db.banned_ips.delete_many({"user_id": user_id})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return {"ok": True, "ips_unbanned": removed.deleted_count}
+
+
+@api.get("/admin/users/{user_id}/ips")
+async def admin_user_ips(user_id: str, admin: dict = Depends(require_admin)):
+    """Return the full IP/location history for one user."""
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    logs = await db.user_ip_logs.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    # mark which IPs are currently banned
+    banned_set = set()
+    async for b in db.banned_ips.find({"user_id": user_id}, {"_id": 0, "ip": 1}):
+        banned_set.add(b["ip"])
+    for it in logs:
+        it["banned"] = it.get("ip") in banned_set
+    return {
+        "user": {
+            "id": target.get("id"),
+            "name": target.get("name"),
+            "email": target.get("email"),
+            "banned": bool(target.get("banned")),
+            "last_ip": target.get("last_ip"),
+            "last_ip_city": target.get("last_ip_city"),
+            "last_ip_region": target.get("last_ip_region"),
+            "last_ip_country": target.get("last_ip_country"),
+            "last_ip_country_code": target.get("last_ip_country_code"),
+            "last_ip_isp": target.get("last_ip_isp"),
+            "last_login_at": target.get("last_login_at"),
+            "register_ip": target.get("register_ip"),
+        },
+        "logs": logs,
+    }
+
+
+@api.get("/admin/banned-ips")
+async def admin_list_banned_ips(admin: dict = Depends(require_admin)):
+    items = await db.banned_ips.find({}, {"_id": 0}).sort("banned_at", -1).to_list(500)
+    return items
+
+
+@api.delete("/admin/banned-ips/{ip}")
+async def admin_unban_ip(ip: str, admin: dict = Depends(require_admin)):
+    res = await db.banned_ips.delete_one({"ip": ip})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="IP não estava bloqueado")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# REFERRALS (USER)
+# ---------------------------------------------------------------------------
+@api.get("/me/referrals")
+async def my_referrals(user: dict = Depends(get_current_user)):
+    me = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    code = me.get("referral_code")
+    if not code:
+        # backfill
+        code = new_referral_code()
+        for _ in range(5):
+            if not await db.users.find_one({"referral_code": code}):
+                break
+            code = new_referral_code()
+        await db.users.update_one({"id": user["id"]}, {"$set": {"referral_code": code}})
+
+    referrals = await db.referrals.find({"referrer_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    total_paid = sum(float(r.get("bonus_amount", 0)) for r in referrals if r.get("status") == "paid")
+    paid_count = sum(1 for r in referrals if r.get("status") == "paid")
+    return {
+        "code": code,
+        "bonus_pct": REFERRAL_BONUS_PCT,
+        "bonus_cap": REFERRAL_BONUS_CAP,
+        "total_referrals": len(referrals),
+        "paid_referrals": paid_count,
+        "total_earned": round(total_paid, 2),
+        "referrals": [
+            {
+                "name": r.get("referred_name", ""),
+                "email": r.get("referred_email", ""),
+                "bonus_amount": float(r.get("bonus_amount", 0)),
+                "status": r.get("status", "pending"),
+                "created_at": r.get("created_at"),
+                "paid_at": r.get("paid_at"),
+            }
+            for r in referrals
+        ],
+    }
+
+
+@api.get("/auth/check-referral/{code}")
+async def check_referral_code(code: str):
+    c = code.strip().upper()
+    if not c:
+        raise HTTPException(status_code=400, detail="Código inválido")
+    ref = await db.users.find_one({"referral_code": c}, {"_id": 0, "name": 1})
+    if not ref:
+        raise HTTPException(status_code=404, detail="Código não encontrado")
+    return {"valid": True, "referrer_name": ref.get("name", "")}
+
+
+# ---------------------------------------------------------------------------
+# NOTIFICATIONS (USER)
+# ---------------------------------------------------------------------------
+@api.get("/me/notifications")
+async def my_notifications(user: dict = Depends(get_current_user)):
+    items = await db.notifications.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    unread = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"items": items, "unread": unread}
+
+
+@api.get("/me/notifications/unread-count")
+async def my_unread_count(user: dict = Depends(get_current_user)):
+    n = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {"unread": n}
+
+
+@api.post("/me/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user: dict = Depends(get_current_user)):
+    res = await db.notifications.update_one(
+        {"id": notif_id, "user_id": user["id"]}, {"$set": {"read": True}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notificação não encontrada")
+    return {"ok": True}
+
+
+@api.post("/me/notifications/read-all")
+async def mark_all_notifications_read(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": user["id"], "read": False}, {"$set": {"read": True}}
+    )
     return {"ok": True}
 
 
