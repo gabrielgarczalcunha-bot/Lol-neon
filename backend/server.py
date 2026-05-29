@@ -12,6 +12,7 @@ import bcrypt
 import jwt
 import httpx
 import asyncio
+import base64
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
@@ -1313,6 +1314,154 @@ async def mark_all_notifications_read(user: dict = Depends(get_current_user)):
         {"user_id": user["id"], "read": False}, {"$set": {"read": True}}
     )
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# ADMIN STATS / RESET
+# ---------------------------------------------------------------------------
+@api.get("/admin/stats")
+async def admin_stats(admin: dict = Depends(require_admin)):
+    total_users = await db.users.count_documents({"role": {"$ne": "admin"}})
+    total_lotes = await db.lotes.count_documents({})
+    total_deposits = await db.deposits.count_documents({})
+    pending_deposits = await db.deposits.count_documents({"status": "pending"})
+    approved_deposits = await db.deposits.count_documents({"status": "approved"})
+    total_withdrawals = await db.withdrawals.count_documents({})
+    pending_withdrawals = await db.withdrawals.count_documents({"status": "pending"})
+    total_transactions = await db.transactions.count_documents({})
+    total_notifications = await db.notifications.count_documents({})
+    total_referrals = await db.referrals.count_documents({})
+    total_banned_ips = await db.banned_ips.count_documents({})
+
+    total_balance = 0.0
+    async for u in db.users.find({"role": {"$ne": "admin"}}, {"_id": 0, "balance": 1}):
+        total_balance += float(u.get("balance", 0))
+
+    sum_deposits = 0.0
+    async for d in db.deposits.find({"status": "approved"}, {"_id": 0, "amount": 1}):
+        sum_deposits += float(d.get("amount", 0))
+
+    sum_withdrawals = 0.0
+    async for w in db.withdrawals.find({"status": "approved"}, {"_id": 0, "amount": 1}):
+        sum_withdrawals += float(w.get("amount", 0))
+
+    return {
+        "total_users": total_users,
+        "total_lotes": total_lotes,
+        "total_deposits": total_deposits,
+        "pending_deposits": pending_deposits,
+        "approved_deposits": approved_deposits,
+        "total_withdrawals": total_withdrawals,
+        "pending_withdrawals": pending_withdrawals,
+        "total_transactions": total_transactions,
+        "total_notifications": total_notifications,
+        "total_referrals": total_referrals,
+        "total_banned_ips": total_banned_ips,
+        "total_balance": round(total_balance, 2),
+        "sum_approved_deposits": round(sum_deposits, 2),
+        "sum_approved_withdrawals": round(sum_withdrawals, 2),
+    }
+
+
+class ResetReq(BaseModel):
+    confirm: str  # must be "RESET" to proceed
+    keep_lotes: bool = True
+
+
+@api.post("/admin/reset")
+async def admin_reset(body: ResetReq, admin: dict = Depends(require_admin)):
+    """
+    Danger zone: wipes ALL non-admin user data.
+    - Deletes: deposits, withdrawals, transactions, purchases, notifications,
+      referrals, user_ip_logs, banned_ips, AND non-admin users.
+    - Keeps: admin user(s), lotes (unless keep_lotes=False), pix settings.
+    """
+    if body.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="Confirmação inválida. Envie 'RESET' para confirmar.")
+
+    deleted = {}
+    res = await db.deposits.delete_many({})
+    deleted["deposits"] = res.deleted_count
+    res = await db.withdrawals.delete_many({})
+    deleted["withdrawals"] = res.deleted_count
+    res = await db.transactions.delete_many({})
+    deleted["transactions"] = res.deleted_count
+    res = await db.purchases.delete_many({})
+    deleted["purchases"] = res.deleted_count
+    res = await db.notifications.delete_many({})
+    deleted["notifications"] = res.deleted_count
+    res = await db.referrals.delete_many({})
+    deleted["referrals"] = res.deleted_count
+    res = await db.user_ip_logs.delete_many({})
+    deleted["user_ip_logs"] = res.deleted_count
+    res = await db.banned_ips.delete_many({})
+    deleted["banned_ips"] = res.deleted_count
+    res = await db.users.delete_many({"role": {"$ne": "admin"}})
+    deleted["users"] = res.deleted_count
+
+    if not body.keep_lotes:
+        res = await db.lotes.delete_many({})
+        deleted["lotes"] = res.deleted_count
+
+    log.warning(f"ADMIN RESET by {admin.get('email')}: {deleted}")
+    return {"ok": True, "deleted": deleted}
+
+
+# ---------------------------------------------------------------------------
+# AI IMAGE GENERATION (LOTE THUMBNAILS)
+# ---------------------------------------------------------------------------
+class GenerateImageReq(BaseModel):
+    prompt: str = Field(min_length=1, max_length=200)
+
+
+@api.post("/admin/generate-image")
+async def admin_generate_image(body: GenerateImageReq, admin: dict = Depends(require_admin)):
+    """Generate a marketing thumbnail for a lote based on its name using Gemini Nano Banana."""
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY não configurada.")
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lib de IA indisponível: {e}")
+
+    user_subject = body.prompt.strip()
+    full_prompt = (
+        f"Create a high-quality, vibrant marketing thumbnail illustration of: '{user_subject}'. "
+        f"Style: modern digital art with neon green and magenta accents, dark futuristic background, "
+        f"glossy, professional product photography quality, centered subject, dramatic lighting, "
+        f"square 1:1 composition, no text, no watermarks, no logos. The subject should be the clear focal point."
+    )
+
+    try:
+        session_id = new_id()
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=session_id,
+            system_message="You are a marketing image generator for an investment app. Generate clean, vibrant product thumbnails."
+        )
+        chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+
+        msg = UserMessage(text=full_prompt)
+        text, images = await chat.send_message_multimodal_response(msg)
+
+        if not images:
+            raise HTTPException(status_code=500, detail="A IA não retornou imagem. Tente um nome mais específico.")
+
+        first = images[0]
+        mime = first.get("mime_type") or "image/png"
+        data = first.get("data") or ""
+        if not data:
+            raise HTTPException(status_code=500, detail="Imagem vazia retornada pela IA.")
+        # data is already base64 string
+        image_url = f"data:{mime};base64,{data}"
+        return {"image_url": image_url, "prompt": user_subject}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"AI image generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Falha ao gerar imagem: {str(e)[:200]}")
 
 
 # ---------------------------------------------------------------------------
