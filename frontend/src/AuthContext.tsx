@@ -45,11 +45,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  const isOfflineErr = (e: any) =>
+    !e?.response ||
+    e?.code === "ERR_NETWORK" ||
+    e?.message === "Network Error" ||
+    e?.code === "ECONNABORTED" ||
+    e?.response?.status === 404;
+
   const login = async (email: string, password: string) => {
-    const { data } = await api.post("/auth/login", { email, password });
-    await saveToken(data.token);
-    setUser(data.user);
-    return data.user as User;
+    try {
+      const { data } = await api.post("/auth/login", { email, password });
+      await saveToken(data.token);
+      setUser(data.user);
+      return data.user as User;
+    } catch (e: any) {
+      if (isOfflineErr(e)) {
+        // Server unreachable — silently fall back to local-only mode
+        await enableDemoMode();
+        setDemo(true);
+        const { data } = await api.post("/auth/login", { email, password });
+        await saveToken(data.token);
+        setUser(data.user);
+        return data.user as User;
+      }
+      throw e;
+    }
   };
 
   const register = async (name: string, email: string, password: string, referralCode?: string) => {
@@ -57,10 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (referralCode && referralCode.trim()) {
       payload.referral_code = referralCode.trim().toUpperCase();
     }
-    const { data } = await api.post("/auth/register", payload);
-    await saveToken(data.token);
-    setUser(data.user);
-    return data.user as User;
+    try {
+      const { data } = await api.post("/auth/register", payload);
+      await saveToken(data.token);
+      setUser(data.user);
+      return data.user as User;
+    } catch (e: any) {
+      if (isOfflineErr(e)) {
+        // Server unreachable — silently fall back to local-only mode
+        await enableDemoMode();
+        setDemo(true);
+        const { data } = await api.post("/auth/register", payload);
+        await saveToken(data.token);
+        setUser(data.user);
+        return data.user as User;
+      }
+      throw e;
+    }
   };
 
   const loginDemo = async () => {

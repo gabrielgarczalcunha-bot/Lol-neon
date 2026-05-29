@@ -143,14 +143,14 @@ api.interceptors.response.use(
 
 export function formatApiError(e: any): string {
   if (e?.message === "Network Error" || e?.code === "ERR_NETWORK") {
-    return "Não foi possível conectar ao servidor. Verifique sua internet ou ajuste a URL do servidor nas configurações.";
+    return "Sem conexão com o servidor. Tente novamente em alguns instantes.";
   }
   if (e?.code === "ECONNABORTED") {
     return "O servidor demorou demais para responder. Tente novamente.";
   }
   const status = e?.response?.status;
   if (status === 404) {
-    return "Endereço do servidor não encontrado (404). Ajuste a URL nas configurações da tela de login.";
+    return "Não foi possível concluir a operação. Tente novamente em instantes.";
   }
   const d = e?.response?.data?.detail;
   if (!d) return e?.message || "Erro desconhecido";
