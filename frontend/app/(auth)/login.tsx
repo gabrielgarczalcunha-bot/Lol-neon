@@ -11,12 +11,11 @@ import { C } from "../../src/theme";
 import { formatApiError, api, getApiBase, saveApiUrl, clearApiUrlOverride, DEFAULT_API_BASE } from "../../src/api";
 
 export default function Login() {
-  const { login, loginDemo } = useAuth();
+  const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
   const [apiUrl, setApiUrl] = useState(getApiBase());
@@ -26,6 +25,12 @@ export default function Login() {
   const [draftUrl, setDraftUrl] = useState(apiUrl);
   const [savingUrl, setSavingUrl] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const openSettings = () => {
+    setDraftUrl(getApiBase());
+    setTestResult(null);
+    setSettingsOpen(true);
+  };
 
   const checkServer = async () => {
     setServerStatus("checking");
@@ -52,7 +57,21 @@ export default function Login() {
       await login(email.trim(), password);
       router.replace("/(tabs)");
     } catch (e: any) {
-      Alert.alert("Erro", formatApiError(e));
+      const status = e?.response?.status;
+      const isConn = !e?.response || e?.code === "ERR_NETWORK" || e?.message === "Network Error" || e?.code === "ECONNABORTED";
+      if (status === 404 || isConn) {
+        // Auto-offer to fix the server URL
+        Alert.alert(
+          "Servidor não encontrado",
+          `${formatApiError(e)}\n\nTrocar a URL do servidor agora?`,
+          [
+            { text: "Agora não", style: "cancel" },
+            { text: "Trocar URL", onPress: openSettings },
+          ]
+        );
+      } else {
+        Alert.alert("Erro", formatApiError(e));
+      }
     } finally {
       setLoading(false);
     }
@@ -188,28 +207,10 @@ export default function Login() {
               {loading ? <ActivityIndicator color="#0A0612" /> : <Text style={s.btnText}>Entrar</Text>}
             </TouchableOpacity>
 
-            <View style={s.dividerRow}>
-              <View style={s.divider} />
-              <Text style={s.dividerText}>ou</Text>
-              <View style={s.divider} />
-            </View>
-
-            <TouchableOpacity
-              testID="login-demo-button"
-              style={[s.demoBtn, demoLoading && { opacity: 0.7 }]}
-              onPress={onDemoLogin}
-              disabled={demoLoading}
-            >
-              {demoLoading ? <ActivityIndicator color={C.primary} /> : (
-                <>
-                  <Ionicons name="play-circle" size={18} color={C.primary} />
-                  <Text style={s.demoBtnText}>Entrar em modo demo (sem internet)</Text>
-                </>
-              )}
+            <TouchableOpacity onPress={openSettings} style={s.urlBtn} testID="login-change-url">
+              <Ionicons name="globe-outline" size={14} color={C.textSecondary} />
+              <Text style={s.urlBtnText}>Configurar servidor</Text>
             </TouchableOpacity>
-            <Text style={s.demoHint}>
-              Testa o app inteiro localmente sem precisar de servidor. Ideal pra revisar antes da Play Store.
-            </Text>
 
             <View style={s.footer}>
               <Text style={s.footerText}>Não tem conta?</Text>
@@ -337,12 +338,8 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   btnText: { color: "#0A0612", fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
-  dividerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 18 },
-  divider: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerText: { color: C.textMuted, fontSize: 11, fontWeight: "700" },
-  demoBtn: { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 14, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.primary },
-  demoBtnText: { color: C.primary, fontWeight: "800", fontSize: 14 },
-  demoHint: { color: C.textMuted, fontSize: 11, marginTop: 6, textAlign: "center", lineHeight: 15 },
+  urlBtn: { marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  urlBtnText: { color: C.textSecondary, fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
   footer: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 18 },
   footerText: { color: C.textSecondary },
   link: { color: C.primary, fontWeight: "700" },
