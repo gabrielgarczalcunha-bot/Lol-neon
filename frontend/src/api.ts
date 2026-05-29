@@ -2,23 +2,28 @@ import axios from "axios";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-// Fallback to the live preview URL if the env var was not embedded at build time
+// ---------------------------------------------------------------------------
+// API base URL resolution
+//   priority: 1) user override saved in storage (SettingsModal on login)
+//             2) build-time env (EXPO_PUBLIC_BACKEND_URL)
+//             3) hardcoded fallback to the current preview URL
+// ---------------------------------------------------------------------------
 const FALLBACK_URL = "https://lotes-gestao.preview.emergentagent.com";
-const RAW_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || FALLBACK_URL;
-// Strip trailing slash to avoid double-slash issues
-export const API_BASE = RAW_BASE.replace(/\/+$/, "");
+const ENV_BASE = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim();
+const URL_OVERRIDE_KEY = "neonfarm.api_url_override";
 
-export const api = axios.create({
-  baseURL: `${API_BASE}/api`,
-  timeout: 20000,
-});
-
-if (__DEV__) {
-  // eslint-disable-next-line no-console
-  console.log("[api] Base URL:", `${API_BASE}/api`);
+function sanitize(u: string): string {
+  return (u || "").trim().replace(/\/+$/, "");
 }
 
-const TOKEN_KEY = "lotepro.token";
+// In-memory current URL (updated when user changes it)
+let CURRENT_BASE = sanitize(ENV_BASE || FALLBACK_URL);
+
+export function getApiBase(): string {
+  return CURRENT_BASE;
+}
+
+export const TOKEN_KEY = "lotepro.token";
 
 async function storageSet(k: string, v: string) {
   if (Platform.OS === "web") {
@@ -41,6 +46,53 @@ async function storageDel(k: string) {
   await SecureStore.deleteItemAsync(k);
 }
 
+export async function loadStoredApiUrl(): Promise<string | null> {
+  return await storageGet(URL_OVERRIDE_KEY);
+}
+
+export async function saveApiUrl(url: string) {
+  const clean = sanitize(url);
+  if (!clean) {
+    await storageDel(URL_OVERRIDE_KEY);
+    CURRENT_BASE = sanitize(ENV_BASE || FALLBACK_URL);
+  } else {
+    await storageSet(URL_OVERRIDE_KEY, clean);
+    CURRENT_BASE = clean;
+  }
+  api.defaults.baseURL = `${CURRENT_BASE}/api`;
+}
+
+export async function clearApiUrlOverride() {
+  await storageDel(URL_OVERRIDE_KEY);
+  CURRENT_BASE = sanitize(ENV_BASE || FALLBACK_URL);
+  api.defaults.baseURL = `${CURRENT_BASE}/api`;
+}
+
+export async function initApiBase() {
+  try {
+    const stored = await loadStoredApiUrl();
+    if (stored) {
+      CURRENT_BASE = sanitize(stored);
+      api.defaults.baseURL = `${CURRENT_BASE}/api`;
+    }
+  } catch {}
+}
+
+// Constants used by login screen for diagnostics
+export const API_BASE = CURRENT_BASE;
+export const DEFAULT_API_BASE = sanitize(ENV_BASE || FALLBACK_URL);
+
+export const api = axios.create({
+  baseURL: `${CURRENT_BASE}/api`,
+  timeout: 25000,                 // mobile networks can be slow
+  headers: { Accept: "application/json" },
+});
+
+if (__DEV__) {
+  // eslint-disable-next-line no-console
+  console.log("[api] Initial base URL:", `${CURRENT_BASE}/api`);
+}
+
 export async function saveToken(token: string) { await storageSet(TOKEN_KEY, token); }
 export async function loadToken(): Promise<string | null> { return await storageGet(TOKEN_KEY); }
 export async function clearToken() { await storageDel(TOKEN_KEY); }
@@ -54,7 +106,32 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Retry once on transient network errors (timeout / no response).
+api.interceptors.response.use(
+  (resp) => resp,
+  async (error) => {
+    const cfg = error?.config;
+    const isNetwork = !error?.response || error?.code === "ECONNABORTED" || error?.message === "Network Error";
+    if (cfg && isNetwork && !cfg._retried) {
+      cfg._retried = true;
+      await new Promise((r) => setTimeout(r, 600));
+      try { return await api.request(cfg); } catch { /* fall through */ }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export function formatApiError(e: any): string {
+  if (e?.message === "Network Error" || e?.code === "ERR_NETWORK") {
+    return "Não foi possível conectar ao servidor. Verifique sua internet ou ajuste a URL do servidor nas configurações.";
+  }
+  if (e?.code === "ECONNABORTED") {
+    return "O servidor demorou demais para responder. Tente novamente.";
+  }
+  const status = e?.response?.status;
+  if (status === 404) {
+    return "Endereço do servidor não encontrado (404). Ajuste a URL nas configurações da tela de login.";
+  }
   const d = e?.response?.data?.detail;
   if (!d) return e?.message || "Erro desconhecido";
   if (typeof d === "string") return d;

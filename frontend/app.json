@@ -8,21 +8,29 @@
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Selecione fotos para lotes"
-      }
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#10B981"
+        "backgroundColor": "#0A0612"
       },
       "edgeToEdgeEnabled": true,
+      "package": "com.neonfarm.app",
       "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
         "READ_MEDIA_IMAGES"
-      ]
+      ],
+      "usesCleartextTraffic": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.neonfarm.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Selecione fotos para lotes",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "web": {
       "bundler": "metro",
