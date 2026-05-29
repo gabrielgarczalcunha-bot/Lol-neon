@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator, Alert,
@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/AuthContext";
 import { C } from "../../src/theme";
-import { formatApiError } from "../../src/api";
+import { formatApiError, api, API_BASE } from "../../src/api";
 
 export default function Login() {
   const { login } = useAuth();
@@ -17,6 +17,20 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        await api.get("/", { timeout: 5000 });
+        if (alive) setServerStatus("online");
+      } catch {
+        if (alive) setServerStatus("offline");
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const onSubmit = async () => {
     if (!email || !password) {
@@ -103,6 +117,14 @@ export default function Login() {
           <TouchableOpacity onPress={() => router.push("/sobre")} testID="about-link">
             <Text style={s.aboutLink}>Sobre a empresa e licença</Text>
           </TouchableOpacity>
+
+          <View style={s.serverInfo}>
+            <View style={[s.dot, serverStatus === "online" && { backgroundColor: C.primary }, serverStatus === "offline" && { backgroundColor: C.danger }, serverStatus === "checking" && { backgroundColor: C.textMuted }]} />
+            <Text style={s.serverText}>
+              {serverStatus === "online" ? "Servidor online" : serverStatus === "offline" ? "Servidor offline — verifique sua conexão" : "Verificando servidor…"}
+            </Text>
+          </View>
+          <Text style={s.serverUrl} selectable>{API_BASE}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -143,4 +165,8 @@ const s = StyleSheet.create({
   footerText: { color: C.textSecondary },
   link: { color: C.primary, fontWeight: "700" },
   aboutLink: { textAlign: "center", color: C.textMuted, marginTop: 18, fontSize: 12 },
+  serverInfo: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.textMuted },
+  serverText: { color: C.textMuted, fontSize: 11 },
+  serverUrl: { color: C.textMuted, fontSize: 10, textAlign: "center", marginTop: 3, opacity: 0.6 },
 });

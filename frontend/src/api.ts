@@ -2,12 +2,21 @@ import axios from "axios";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+// Fallback to the live preview URL if the env var was not embedded at build time
+const FALLBACK_URL = "https://lotes-gestao.preview.emergentagent.com";
+const RAW_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || FALLBACK_URL;
+// Strip trailing slash to avoid double-slash issues
+export const API_BASE = RAW_BASE.replace(/\/+$/, "");
 
 export const api = axios.create({
-  baseURL: `${BASE}/api`,
+  baseURL: `${API_BASE}/api`,
   timeout: 20000,
 });
+
+if (__DEV__) {
+  // eslint-disable-next-line no-console
+  console.log("[api] Base URL:", `${API_BASE}/api`);
+}
 
 const TOKEN_KEY = "lotepro.token";
 
