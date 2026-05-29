@@ -58,12 +58,6 @@ export default function Perfil() {
             testID="profile-referral"
           />
           <Row
-            icon="key"
-            label="Senha de saque"
-            onPress={() => router.push("/senha-saque")}
-            testID="profile-withdraw-pwd"
-          />
-          <Row
             icon="information-circle"
             label="Sobre a empresa"
             onPress={() => router.push("/sobre")}

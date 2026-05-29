@@ -217,8 +217,9 @@ def sanitize_user(u: dict) -> dict:
     u = dict(u)
     u.pop("_id", None)
     u.pop("password_hash", None)
-    # expose whether withdraw password is set (boolean), never the hash
-    u["has_withdraw_password"] = bool(u.pop("withdraw_password_hash", None))
+    # Withdraw password is now the same as login password — always available
+    u.pop("withdraw_password_hash", None)
+    u["has_withdraw_password"] = True
     return u
 
 
@@ -778,12 +779,9 @@ async def create_withdrawal(body: WithdrawReq, user: dict = Depends(get_current_
     current = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     balance = float(current.get("balance", 0))
 
-    # Verify withdrawal password
-    wpw_hash = current.get("withdraw_password_hash")
-    if not wpw_hash:
-        raise HTTPException(status_code=400, detail="Defina sua senha de saque antes de continuar.")
-    if not verify_password(body.withdraw_password, wpw_hash):
-        raise HTTPException(status_code=401, detail="Senha de saque incorreta.")
+    # Verify with the LOGIN password (no separate withdraw password anymore)
+    if not verify_password(body.withdraw_password, current.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Senha incorreta.")
 
     count_approved = await db.withdrawals.count_documents(
         {"user_id": user["id"], "status": "approved"}

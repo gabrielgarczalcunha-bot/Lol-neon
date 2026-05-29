@@ -21,7 +21,6 @@ export default function Saque() {
   const router = useRouter();
   const [balance, setBalance] = useState(0);
   const [rules, setRules] = useState<Rules | null>(null);
-  const [hasWPwd, setHasWPwd] = useState<boolean>(false);
   const [amount, setAmount] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [keyType, setKeyType] = useState<"cpf" | "email" | "telefone" | "aleatoria">("aleatoria");
@@ -35,11 +34,10 @@ export default function Saque() {
       const token = await loadToken();
       if (!token || cancelled) return;
       try {
-        const [w, r, me] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules"), api.get("/auth/me")]);
+        const [w, r] = await Promise.all([api.get("/wallet"), api.get("/withdrawals/rules")]);
         if (cancelled) return;
         setBalance(w.data.balance || 0);
         setRules(r.data);
-        setHasWPwd(!!me.data.has_withdraw_password);
       } catch (e: any) {
         if (!cancelled) Alert.alert("Erro", formatApiError(e));
       }
@@ -54,14 +52,6 @@ export default function Saque() {
 
   const submit = async () => {
     if (!rules) return;
-    if (!hasWPwd) {
-      Alert.alert(
-        "Senha de saque necessária",
-        "Cadastre uma senha de saque para continuar.",
-        [{ text: "Cadastrar agora", onPress: () => router.push("/senha-saque?redirect=saque") }]
-      );
-      return;
-    }
     if (!gross || gross <= 0) { Alert.alert("Atenção", "Informe um valor válido."); return; }
     if (gross < rules.min_amount) {
       Alert.alert("Atenção", `Valor mínimo: ${fmtBRL(rules.min_amount)}`);
@@ -69,7 +59,7 @@ export default function Saque() {
     }
     if (gross > balance) { Alert.alert("Atenção", "Saldo insuficiente."); return; }
     if (!pixKey.trim()) { Alert.alert("Atenção", "Informe a chave PIX de destino."); return; }
-    if (!withdrawPassword) { Alert.alert("Atenção", "Informe sua senha de saque."); return; }
+    if (!withdrawPassword) { Alert.alert("Atenção", "Informe sua senha de acesso."); return; }
 
     setLoading(true);
     try {
@@ -171,23 +161,21 @@ export default function Saque() {
               autoCapitalize="none"
             />
 
-            <Text style={[s.label, { marginTop: 14 }]}>Senha de saque</Text>
+            <Text style={[s.label, { marginTop: 14 }]}>Senha de acesso</Text>
             <TextInput
               testID="withdraw-password"
               style={s.input}
-              placeholder={hasWPwd ? "Sua senha de saque" : "Cadastre antes no Perfil"}
+              placeholder="Digite sua senha de login"
               placeholderTextColor={C.textMuted}
               value={withdrawPassword}
               onChangeText={setWithdrawPassword}
               secureTextEntry
-              keyboardType="number-pad"
-              editable={hasWPwd}
+              autoCapitalize="none"
+              autoCorrect={false}
             />
-            {!hasWPwd && (
-              <TouchableOpacity onPress={() => router.push("/senha-saque?redirect=saque")} testID="go-create-withdraw-pwd">
-                <Text style={{ color: C.primary, fontWeight: "700", marginTop: 8, fontSize: 12 }}>+ Cadastrar senha de saque</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={{ color: C.textMuted, fontSize: 11, marginTop: 6 }}>
+              Use a mesma senha que você usa para entrar no app.
+            </Text>
           </View>
 
           <View style={s.info}>
