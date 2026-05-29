@@ -57,21 +57,7 @@ export default function Login() {
       await login(email.trim(), password);
       router.replace("/(tabs)");
     } catch (e: any) {
-      const status = e?.response?.status;
-      const isConn = !e?.response || e?.code === "ERR_NETWORK" || e?.message === "Network Error" || e?.code === "ECONNABORTED";
-      if (status === 404 || isConn) {
-        // Auto-offer to fix the server URL
-        Alert.alert(
-          "Servidor não encontrado",
-          `${formatApiError(e)}\n\nTrocar a URL do servidor agora?`,
-          [
-            { text: "Agora não", style: "cancel" },
-            { text: "Trocar URL", onPress: openSettings },
-          ]
-        );
-      } else {
-        Alert.alert("Erro", formatApiError(e));
-      }
+      Alert.alert("Erro", formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -143,15 +129,6 @@ export default function Login() {
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        {/* Gear icon for server URL config */}
-        <TouchableOpacity
-          style={s.gearBtn}
-          onPress={() => { setDraftUrl(apiUrl); setTestResult(null); setSettingsOpen(true); }}
-          testID="login-settings-gear"
-        >
-          <Ionicons name="settings-outline" size={20} color={C.textMuted} />
-        </TouchableOpacity>
-
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.brand}>
             <View style={s.logoBox}>
@@ -207,11 +184,6 @@ export default function Login() {
               {loading ? <ActivityIndicator color="#0A0612" /> : <Text style={s.btnText}>Entrar</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={openSettings} style={s.urlBtn} testID="login-change-url">
-              <Ionicons name="globe-outline" size={14} color={C.textSecondary} />
-              <Text style={s.urlBtnText}>Configurar servidor</Text>
-            </TouchableOpacity>
-
             <View style={s.footer}>
               <Text style={s.footerText}>Não tem conta?</Text>
               <Link href="/(auth)/register" asChild>
@@ -223,18 +195,6 @@ export default function Login() {
           <TouchableOpacity onPress={() => router.push("/sobre")} testID="about-link">
             <Text style={s.aboutLink}>Sobre a empresa e licença</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity onPress={checkServer} style={s.serverInfo} testID="check-server">
-            <View style={[s.dot,
-              serverStatus === "online" && { backgroundColor: C.primary },
-              serverStatus === "offline" && { backgroundColor: C.danger },
-              serverStatus === "checking" && { backgroundColor: C.textMuted }
-            ]} />
-            <Text style={s.serverText}>
-              {serverStatus === "online" ? "Servidor online" : serverStatus === "offline" ? "Servidor offline — toque aqui ou ajuste a URL ⚙️" : "Verificando servidor…"}
-            </Text>
-          </TouchableOpacity>
-          <Text style={s.serverUrl} selectable numberOfLines={1}>{apiUrl}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
