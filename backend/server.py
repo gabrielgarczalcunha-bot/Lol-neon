@@ -26,16 +26,21 @@ from pydantic import BaseModel, Field, EmailStr
 # ---------------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------------
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
-JWT_SECRET = os.environ["JWT_SECRET"]
-ADMIN_EMAIL = os.environ["ADMIN_EMAIL"].lower()
-ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.environ.get("DB_NAME", "neonfarm")
+JWT_SECRET = os.environ.get("JWT_SECRET") or secrets.token_urlsafe(48)
+ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "admin@neonfarm.app").lower()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or "ChangeMe123!"
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 24 * 30  # 30 days - mobile friendly
 
-client = AsyncIOMotorClient(MONGO_URL)
+# Use short timeouts so a hung MongoDB doesn't block readiness in prod.
+client = AsyncIOMotorClient(
+    MONGO_URL,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+)
 db = client[DB_NAME]
 
 app = FastAPI(title="LotePro API")
@@ -411,6 +416,16 @@ def build_pix_payload(key: str, amount: float, merchant_name: str, merchant_city
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():
+    # Wrap entire startup so a slow MongoDB doesn't block readiness in prod.
+    try:
+        await asyncio.wait_for(_init_db(), timeout=20.0)
+    except asyncio.TimeoutError:
+        log.warning("DB init timed out — continuing without blocking startup")
+    except Exception as e:
+        log.warning(f"DB init failed: {e}")
+
+
+async def _init_db():
     await db.users.create_index("email", unique=True)
     await db.users.create_index("id", unique=True)
     await db.lotes.create_index("id", unique=True)
@@ -425,10 +440,11 @@ async def startup():
     await db.user_ip_logs.create_index("ip")
     await db.banned_ips.create_index("ip", unique=True)
 
-    # Backfill referral_code on users that don't have one yet
-    async for u in db.users.find({"referral_code": {"$exists": False}}, {"_id": 0, "id": 1}):
+    # Backfill referral_code lazily — limit to 100 users per cold start so we
+    # never block the readiness probe. Future users get a code on register.
+    cursor = db.users.find({"referral_code": {"$exists": False}}, {"_id": 0, "id": 1}).limit(100)
+    async for u in cursor:
         code = new_referral_code()
-        # ensure uniqueness
         for _ in range(5):
             if not await db.users.find_one({"referral_code": code}):
                 break

@@ -8,8 +8,14 @@ import { Platform } from "react-native";
 //             2) build-time env (EXPO_PUBLIC_BACKEND_URL)
 //             3) hardcoded fallback to the current preview URL
 // ---------------------------------------------------------------------------
-const FALLBACK_URL = "https://lotes-gestao.preview.emergentagent.com";
+// Fallback URL only used as a last resort; in production EXPO_PUBLIC_BACKEND_URL
+// is baked at build time. On web we can use the current origin.
 const ENV_BASE = (process.env.EXPO_PUBLIC_BACKEND_URL || "").trim();
+let WEB_ORIGIN = "";
+if (Platform.OS === "web" && typeof window !== "undefined" && (window as any).location) {
+  WEB_ORIGIN = (window as any).location.origin || "";
+}
+const FALLBACK_URL = WEB_ORIGIN || ENV_BASE || "";
 const URL_OVERRIDE_KEY = "neonfarm.api_url_override";
 
 function sanitize(u: string): string {
